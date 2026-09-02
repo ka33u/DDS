@@ -1,0 +1,128 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, monospace;
+  --font-heading: "Avenir Next", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --radius-sm: calc(var(--radius) * .65);
+  --radius-md: calc(var(--radius) * .82);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.35);
+}
+
+:root {
+  --background: #f5f7f8;
+  --foreground: #17222c;
+  --card: #ffffff;
+  --card-foreground: #17222c;
+  --popover: #ffffff;
+  --popover-foreground: #17222c;
+  --primary: #0f5f68;
+  --primary-foreground: #f7ffff;
+  --secondary: #e7f0ef;
+  --secondary-foreground: #174d53;
+  --muted: #edf1f2;
+  --muted-foreground: #65737c;
+  --accent: #e7f0ef;
+  --accent-foreground: #174d53;
+  --destructive: #b64138;
+  --border: #dbe2e4;
+  --input: #d2dcde;
+  --ring: #3f8a90;
+  --radius: .72rem;
+}
+
+@layer base {
+  * { @apply border-border outline-ring/50; }
+  html { @apply font-sans; }
+  body { @apply bg-background text-foreground antialiased; }
+  button, input { font: inherit; }
+}
+
+body {
+  background-image:
+    radial-gradient(circle at 12% -8%, rgba(15,95,104,.08), transparent 28rem),
+    linear-gradient(rgba(255,255,255,.4) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.4) 1px, transparent 1px);
+  background-size: auto, 28px 28px, 28px 28px;
+}
+
+.metric-icon {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  place-items: center;
+  border-radius: .7rem;
+  color: #0f5f68;
+  background: #e1efee;
+}
+.metric-icon svg { width: 1rem; height: 1rem; }
+.metric-green { color: #23725f; background: #e5f2ec; }
+.metric-amber { color: #9a6015; background: #fff0d2; }
+
+.engineering-details summary {
+  display: flex;
+  min-height: 4.2rem;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: .85rem 1rem;
+}
+.engineering-details summary::-webkit-details-marker { display: none; }
+.engineering-details summary > span { display: grid; grid-template-columns: 1.25rem 1fr; align-items: center; column-gap: .45rem; }
+.engineering-details summary b { font-size: .875rem; }
+.engineering-details summary small { grid-column: 2; color: var(--muted-foreground); font-size: .72rem; }
+.engineering-details[open] summary > svg { transform: rotate(180deg); }
+.engineering-details summary > svg { transition: transform .18s ease; }
+
+.status-strip {
+  display: grid;
+  grid-template-columns: 2.4rem minmax(0, 1fr);
+  align-items: start;
+  gap: .75rem;
+  border: 1px solid #badfd4;
+  border-radius: .8rem;
+  padding: .85rem 1rem;
+  color: #1e6254;
+  background: #ebf6f2;
+}
+.status-strip.warning { color: #815116; border-color: #ecd39b; background: #fff7e7; }
+.status-strip > span { display: grid; width: 2.1rem; height: 2.1rem; place-items: center; border-radius: .65rem; background: rgba(255,255,255,.72); }
+.status-strip svg { width: 1rem; height: 1rem; }
+.status-strip b { font-size: .8rem; }
+.status-strip p { margin-top: .15rem; font-size: .72rem; line-height: 1.55; opacity: .82; }
+
+[data-slot="tabs-list"] { overflow-x: auto; max-width: 100%; }
+[data-slot="table-container"] { scrollbar-width: thin; }
+[data-slot="table-head"], [data-slot="table-cell"] { padding-top: .7rem; padding-bottom: .7rem; }
+
+@media (max-width: 640px) {
+  body { background-size: auto, 20px 20px, 20px 20px; }
+  .engineering-details > div { grid-template-columns: 1fr; }
+  .engineering-details > div > label { grid-column: auto; }
+}
