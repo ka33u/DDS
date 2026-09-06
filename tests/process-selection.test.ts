@@ -67,3 +67,14 @@ test('skip-head loads use destination radius and speed rather than the source dr
   assert.ok(Math.abs(target.torque - base[0].designTorque * 2) < 0.000001);
   assert.ok(Math.abs(result.motors[0].requiredRpm - base[1].lineSpeed * 60000 / (Math.PI * 560)) < 0.000001);
 });
+
+test('customer measured force and pass-specific margin override formula independently', () => {
+  const c = makeProcessCase(defaultConfig);
+  c.config.passes[0].measuredForce = 10000;
+  c.config.passes[0].safetyFactor = 1.6;
+  const result = selectCommonMotors([c], { ...defaultConfig, maxOverallLength: 0 });
+  assert.equal(result.motors[0].requiredTorque, 4480);
+  assert.equal(result.motors[0].ratedTorque, 5000);
+  c.config.passes[0].measuredForce = -1;
+  assert.ok(selectCommonMotors([c], defaultConfig).errors.some(e => e.includes('实测拉拔力')));
+});

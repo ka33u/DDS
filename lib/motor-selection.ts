@@ -3,6 +3,8 @@ export type MachinePreset = "standard" | "universal" | "custom";
 export interface DrawingPass {
   diameter: number;
   drumDiameter: number;
+  measuredForce?: number;
+  safetyFactor?: number;
 }
 
 export interface FrameRule {
@@ -198,11 +200,12 @@ export function calculateSelection(config: SelectionConfig): SelectionRow[] {
     const strengthBefore = config.incomingStrength * Math.sqrt(config.entryDiameter / incomingDiameter) * config.strengthFactor;
     const strengthAfter = config.incomingStrength * Math.sqrt(config.entryDiameter / pass.diameter) * config.strengthFactor;
     const lineSpeed = config.finalSpeed * Math.pow(actualFinalDiameter / pass.diameter, 2);
-    const drawingForce = compression > 0
+    const calculatedForce = compression > 0
       ? config.forceCoefficient * Math.pow(incomingDiameter, 2) * ((strengthBefore + strengthAfter) / 2) * Math.sqrt(compression)
       : 0;
+    const drawingForce = pass.measuredForce ?? calculatedForce;
     const drawingTorque = (drawingForce * pass.drumDiameter) / 2000;
-    const factor = index === 0 ? config.firstPassFactor : config.steadyPassFactor;
+    const factor = pass.safetyFactor ?? (index === 0 ? config.firstPassFactor : config.steadyPassFactor);
     const designTorque = drawingTorque * factor;
     const designRpm = (lineSpeed / (Math.PI * (pass.drumDiameter / 1000))) * 60;
     return { pass: index + 1, incomingDiameter, diameter: pass.diameter, drumDiameter: pass.drumDiameter, compression, strengthBefore, strengthAfter, lineSpeed, drawingForce, drawingTorque, factor, designTorque, designRpm };

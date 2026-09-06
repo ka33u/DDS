@@ -37,6 +37,8 @@ export function processErrors(item: ProcessCase): string[] {
   }
   if (!c.passes.length || c.passes.length > 16) errors.push('应配置 1～16 道工艺');
   c.passes.forEach((p, i) => {
+    if (p.measuredForce !== undefined && (!Number.isFinite(p.measuredForce) || p.measuredForce < 0)) errors.push(`第 ${i + 1} 道实测拉拔力必须为非负数`);
+    if (p.safetyFactor !== undefined && (!Number.isFinite(p.safetyFactor) || p.safetyFactor <= 0)) errors.push(`第 ${i + 1} 道独立安全系数必须为正数`);
     if (!(p.diameter > 0 && p.diameter < (i ? c.passes[i - 1].diameter : c.entryDiameter))) errors.push(`第 ${i + 1} 道丝径必须小于前道且大于零`);
     if (!Number.isFinite(p.drumDiameter) || p.drumDiameter <= 0) errors.push(`第 ${i + 1} 道卷筒直径无效`);
   });

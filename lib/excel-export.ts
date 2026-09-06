@@ -14,8 +14,8 @@ export function buildProcessExcel(config: SelectionConfig, cases: ProcessCase[],
       ...motors.flatMap(m => m.loads.map(p => [p.caseName, p.station, p.pass, p.kind, p.force, p.drum, p.torque, p.rpm, m.ratedTorque === null ? null : m.ratedTorque - p.torque, m.ratedRpm === null ? null : m.ratedRpm - p.rpm])),
     ]),
     sheet('工艺输入', [
-      ['工艺', '启用', '进径 mm', '成品车速 m/s', '进线强度 MPa', '首道系数', '后道系数', 'K', '拉力系数', '跳头跨度', '调模 m/s', '调模系数', '调模拉力 N', '附加转矩 N·m', '工位', '丝径 mm', '卷筒 mm'],
-      ...cases.flatMap(c => c.config.passes.map((p, i) => [c.name, c.enabled ? '是' : '否', c.config.entryDiameter, c.config.finalSpeed, c.config.incomingStrength, c.config.firstPassFactor, c.config.steadyPassFactor, c.config.strengthFactor, c.config.forceCoefficient, c.config.skipHeadSpan, c.jogSpeed, c.jogFactor, c.jogForce, c.additionalTorque, c.stations[i], p.diameter, p.drumDiameter])),
+      ['工艺', '启用', '进径 mm', '成品车速 m/s', '进线强度 MPa', '首道系数', '后道系数', 'K', '拉力系数', '跳头跨度', '调模 m/s', '调模系数', '调模拉力 N', '附加转矩 N·m', '工位', '丝径 mm', '卷筒 mm', '实测拉拔力 N', '独立安全系数'],
+      ...cases.flatMap(c => c.config.passes.map((p, i) => [c.name, c.enabled ? '是' : '否', c.config.entryDiameter, c.config.finalSpeed, c.config.incomingStrength, c.config.firstPassFactor, c.config.steadyPassFactor, c.config.strengthFactor, c.config.forceCoefficient, c.config.skipHeadSpan, c.jogSpeed, c.jogFactor, c.jogForce, c.additionalTorque, c.stations[i], p.diameter, p.drumDiameter, p.measuredForce ?? '公式计算', p.safetyFactor ?? '全局系数'])),
     ]),
     sheet('设备选型依据', [
       ['参数', '数值'], ['转矩档位 N·m', config.torqueCatalog.join(', ')], ['转速档位 r/min', config.speedCatalog.join(', ')], ['允许总长 mm', config.maxOverallLength], ['效率', config.efficiency], ['功率因数', config.powerFactor], ['电压利用率', config.voltageUtilization], ['低速阈值', config.lowSpeedThreshold], ['低速最小中心高', config.lowSpeedMinFrame],
