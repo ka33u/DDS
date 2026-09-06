@@ -56,6 +56,7 @@ export function selectCommonMotors(cases: ProcessCase[], equipment: SelectionCon
     if (!Number.isFinite(equipment[key]) || equipment[key] <= 0 || (key !== 'voltage' && equipment[key] > 1)) errors.push(`设备电气参数 ${key} 无效`);
   }
   if (!Number.isFinite(equipment.maxOverallLength) || equipment.maxOverallLength < 0) errors.push('允许总长必须为非负数');
+  if ([equipment.lowSpeedThreshold, equipment.lowSpeedMinFrame].some(x => !Number.isFinite(x) || x < 0)) errors.push('低速阈值和低速最小中心高必须为非负数');
   const validCatalog = (list: number[]) => list.length > 0 && list.every(x => Number.isFinite(x) && x > 0);
   if (!validCatalog(equipment.torqueCatalog) || !validCatalog(equipment.speedCatalog)) errors.push('转矩和转速档位库必须包含有效正数');
   if (!equipment.frameRules.length || equipment.frameRules.some(f => ![f.frame, f.maxTorque, f.estimatedLength, f.poles].every(x => Number.isFinite(x) && x > 0) || f.poles % 2 !== 0)) errors.push('机座库必须包含正数参数，极数须为正偶数');
@@ -66,17 +67,22 @@ export function selectCommonMotors(cases: ProcessCase[], equipment: SelectionCon
     rows.forEach((r, i) => {
       const station = item.stations[i];
       const previous = rows.slice(Math.max(0, i - item.config.skipHeadSpan), i + 1);
-      const covered = previous.reduce((a, b) => a.designTorque > b.designTorque ? a : b);
+      // A transferred drawing load acts on the destination drum radius.
+      // Comparing source torques would undersize a larger destination drum.
+      const covered = previous.reduce((a, b) => a.drawingForce * a.factor > b.drawingForce * b.factor ? a : b);
       points.push({ caseName: item.name, station, pass: r.pass,
         kind: covered.pass === r.pass ? '生产' : `跳头覆盖第 ${covered.pass} 道`,
-        torque: covered.designTorque + item.additionalTorque,
-        rpm: item.config.skipHeadSpan > 0 && i === 0 && rows[1] ? Math.max(r.designRpm, rows[1].designRpm) : r.designRpm,
+        torque: covered.drawingForce * covered.factor * r.drumDiameter / 2000 + item.additionalTorque,
+        rpm: item.config.skipHeadSpan > 0 && i === 0 && rows[1] ? Math.max(r.lineSpeed, rows[1].lineSpeed) * 60000 / (Math.PI * r.drumDiameter) : r.designRpm,
         force: covered.drawingForce, drum: r.drumDiameter });
       if (item.jogSpeed > 0) points.push({ caseName: item.name, station, pass: r.pass, kind: '调模',
         torque: (item.jogForce > 0 ? item.jogForce * r.drumDiameter / 2000 : r.drawingTorque) * item.jogFactor + item.additionalTorque,
         rpm: item.jogSpeed * 60000 / (Math.PI * r.drumDiameter),
         force: item.jogForce || r.drawingForce, drum: r.drumDiameter });
     });
+  }
+  if (points.some(p => ![p.force, p.torque, p.rpm].every(Number.isFinite))) {
+    return { errors: ['输入量级过大，计算超出有效数值范围，请检查丝径、拉力和车速单位。'], motors: [] as CommonMotor[] };
   }
   const pick = (value: number, catalog: number[]) => [...catalog].sort((a, b) => a - b).find(x => x >= value) ?? null;
   const motors: CommonMotor[] = [...new Set(points.map(p => p.station))].sort((a, b) => a - b).map(station => {

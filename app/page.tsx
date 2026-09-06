@@ -193,6 +193,7 @@ export default function Home() {
         </section>
 
         <ProcessWorkbench config={config} onLoad={setConfig} />
+        <p className="mb-4 text-sm text-muted-foreground">下方用于编辑当前工艺和查看附件方式复算；客户多工艺、调模和实际工位的最终推荐，请使用上方“客户工艺兼容选型”及其导出按钮。</p>
         <div className="grid gap-5 xl:grid-cols-[410px_minmax(0,1fr)]">
           <aside className="space-y-5">
             <Card className="shadow-sm">

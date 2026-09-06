@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { defaultConfig } from '../lib/motor-selection.ts';
+import { calculateSelection, defaultConfig } from '../lib/motor-selection.ts';
 import { makeProcessCase, selectCommonMotors } from '../lib/process-selection.ts';
 import { buildProcessExcel } from '../lib/excel-export.ts';
 
@@ -54,4 +54,16 @@ test('export carries actual computed motor, process snapshots, and escaped custo
   assert.ok(xml.includes('客户 A &amp; B &lt;高速&gt;'));
   assert.ok(xml.includes(String(motors[0].requiredRpm)));
   assert.ok(xml.includes('工艺输入'));
+});
+
+test('skip-head loads use destination radius and speed rather than the source drum', () => {
+  const config = structuredClone(defaultConfig);
+  config.skipHeadSpan = 1;
+  config.passes[1].drumDiameter = 1120;
+  const base = calculateSelection(config);
+  const result = selectCommonMotors([makeProcessCase(config)], { ...config, maxOverallLength: 0 });
+  const target = result.motors[1].loads.find(p => p.kind.startsWith('跳头'))!;
+  assert.ok(target);
+  assert.ok(Math.abs(target.torque - base[0].designTorque * 2) < 0.000001);
+  assert.ok(Math.abs(result.motors[0].requiredRpm - base[1].lineSpeed * 60000 / (Math.PI * 560)) < 0.000001);
 });
