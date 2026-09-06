@@ -1,6 +1,37 @@
 import type { SelectionConfig, SelectionRow } from "./motor-selection";
+import type { ProcessCase, CommonMotor } from './process-selection';
 
 type Cell = string | number | null;
+
+export function buildProcessExcel(config: SelectionConfig, cases: ProcessCase[], motors: CommonMotor[]) {
+  return workbook([
+    sheet('兼容选型参数表', [
+      ['项目', '工位', '型号', '状态', '转矩 N·m', '转速 r/min', '功率 kW', '电流 A', '电压 V', '频率 Hz', '中心高', '极数', '总长 mm', '转矩决定工况', '转速决定工况'],
+      ...motors.map(m => [config.projectName, m.station, m.model, m.status, m.ratedTorque, m.ratedRpm, m.power, m.current, config.voltage, m.frequency, m.frame, m.poles, m.length, m.torqueSource, m.speedSource]),
+    ], [150, 50, 220, 220, 90, 90, 90, 90, 70, 80, 70, 60, 80, 240, 240]),
+    sheet('工况覆盖明细', [
+      ['工艺', '工位', '道次', '用途', '拉力 N', '卷筒 mm', '需求转矩 N·m', '需求转速 r/min', '转矩余量 N·m', '转速余量 r/min'],
+      ...motors.flatMap(m => m.loads.map(p => [p.caseName, p.station, p.pass, p.kind, p.force, p.drum, p.torque, p.rpm, m.ratedTorque === null ? null : m.ratedTorque - p.torque, m.ratedRpm === null ? null : m.ratedRpm - p.rpm])),
+    ]),
+    sheet('工艺输入', [
+      ['工艺', '启用', '进径 mm', '成品车速 m/s', '进线强度 MPa', '首道系数', '后道系数', 'K', '拉力系数', '跳头跨度', '调模 m/s', '调模系数', '调模拉力 N', '附加转矩 N·m', '工位', '丝径 mm', '卷筒 mm'],
+      ...cases.flatMap(c => c.config.passes.map((p, i) => [c.name, c.enabled ? '是' : '否', c.config.entryDiameter, c.config.finalSpeed, c.config.incomingStrength, c.config.firstPassFactor, c.config.steadyPassFactor, c.config.strengthFactor, c.config.forceCoefficient, c.config.skipHeadSpan, c.jogSpeed, c.jogFactor, c.jogForce, c.additionalTorque, c.stations[i], p.diameter, p.drumDiameter])),
+    ]),
+    sheet('设备选型依据', [
+      ['参数', '数值'], ['转矩档位 N·m', config.torqueCatalog.join(', ')], ['转速档位 r/min', config.speedCatalog.join(', ')], ['允许总长 mm', config.maxOverallLength], ['效率', config.efficiency], ['功率因数', config.powerFactor], ['电压利用率', config.voltageUtilization], ['低速阈值', config.lowSpeedThreshold], ['低速最小中心高', config.lowSpeedMinFrame],
+      ['选择原则', '生产、跳头和调模逐工位取最大转矩和最大转速；向上选最小标准档位；选择满足转矩和长度的最小中心高。均按连续恒转矩，不假设弱磁或短时过载。'],
+      ['调模拉力为零', '使用该道计算拉拔力；调模转矩再乘调模系数并加附加阻力转矩'],
+      ['型号与尺寸', '参数组合建议；尺寸为可编辑初始库，按厂家外形图确认'],
+    ], [160, 500]),
+    sheet('机座库', [['中心高', '转矩能力 N·m', '预计总长 mm', '极数'], ...config.frameRules.map(f => [f.frame, f.maxTorque, f.estimatedLength, f.poles])]),
+  ]);
+}
+
+export function downloadProcessExcel(config: SelectionConfig, cases: ProcessCase[], motors: CommonMotor[]) {
+  const url = URL.createObjectURL(new Blob(['\uFEFF', buildProcessExcel(config, cases, motors)], { type: 'application/vnd.ms-excel;charset=utf-8' }));
+  const a = document.createElement('a'); a.href = url; a.download = `${safeName(config.projectName)}_兼容选型.xls`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 const escapeXml = (value: Cell) => String(value ?? "")
   .replace(/&/g, "&amp;")

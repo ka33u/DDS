@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { downloadSelectionExcel } from "@/lib/excel-export";
+import { ProcessWorkbench } from "@/components/process-workbench";
 import {
   applyPreset,
   calculateSelection,
@@ -191,6 +192,7 @@ export default function Home() {
           </div>
         </section>
 
+        <ProcessWorkbench config={config} onLoad={setConfig} />
         <div className="grid gap-5 xl:grid-cols-[410px_minmax(0,1fr)]">
           <aside className="space-y-5">
             <Card className="shadow-sm">

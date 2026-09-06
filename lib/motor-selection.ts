@@ -213,7 +213,7 @@ export function calculateSelection(config: SelectionConfig): SelectionRow[] {
     const reserve = baseRows.slice(reserveStart, index + 1).reduce((largest, row) => row.designTorque > largest.designTorque ? row : largest);
     const rpmRequired = config.skipHeadSpan > 0 && index === 0 && baseRows[1] ? Math.max(base.designRpm, baseRows[1].designRpm) : base.designRpm;
     const ratedTorque = catalogPick(reserve.designTorque, config.torqueCatalog, config.catalogTolerance);
-    const ratedRpm = catalogPick(rpmRequired, config.speedCatalog, config.catalogTolerance);
+    const ratedRpm = catalogPick(rpmRequired, config.speedCatalog, 0);
     const frame = selectFrame(ratedTorque, ratedRpm, config);
     const ratedPower = (ratedTorque * ratedRpm) / 9550;
     const ratedCurrent = (ratedPower * 1000) / (Math.sqrt(3) * config.voltage * config.voltageUtilization * config.efficiency * config.powerFactor);
