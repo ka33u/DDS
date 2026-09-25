@@ -12,9 +12,14 @@ export interface FrameRule {
   maxTorque: number;
   estimatedLength: number;
   poles: number;
+  supportedPoles?: number[];
 }
 
 export interface SelectionConfig {
+  selectionMode?: 'custom' | 'reference';
+  referenceRecipe?: string;
+  maxFrequency?: number;
+  stationChoices?: Record<number, { frame?: number; poles?: number }>;
   projectName: string;
   machineModel: string;
   material: string;
@@ -189,15 +194,15 @@ export function equalCompressionPasses(count: number, entryDiameter: number, fin
   }));
 }
 
-export function calculateSelection(config: SelectionConfig): SelectionRow[] {
+export function calculateDrawingRequirements(config: SelectionConfig) {
   const activePasses = config.passes.filter((pass) => pass.diameter > 0 && pass.drumDiameter > 0).slice(0, 16);
   if (!activePasses.length) return [];
   const actualFinalDiameter = activePasses.at(-1)!.diameter;
 
-  const baseRows = activePasses.map((pass, index) => {
+  return activePasses.map((pass, index) => {
     const incomingDiameter = index === 0 ? config.entryDiameter : activePasses[index - 1].diameter;
     const compression = 1 - Math.pow(pass.diameter / incomingDiameter, 2);
-    const strengthBefore = config.incomingStrength * Math.sqrt(config.entryDiameter / incomingDiameter) * config.strengthFactor;
+    const strengthBefore = index === 0 ? config.incomingStrength : config.incomingStrength * Math.sqrt(config.entryDiameter / incomingDiameter) * config.strengthFactor;
     const strengthAfter = config.incomingStrength * Math.sqrt(config.entryDiameter / pass.diameter) * config.strengthFactor;
     const lineSpeed = config.finalSpeed * Math.pow(actualFinalDiameter / pass.diameter, 2);
     const calculatedForce = compression > 0
@@ -211,6 +216,10 @@ export function calculateSelection(config: SelectionConfig): SelectionRow[] {
     return { pass: index + 1, incomingDiameter, diameter: pass.diameter, drumDiameter: pass.drumDiameter, compression, strengthBefore, strengthAfter, lineSpeed, drawingForce, drawingTorque, factor, designTorque, designRpm };
   });
 
+}
+
+export function calculateSelection(config: SelectionConfig): SelectionRow[] {
+  const baseRows = calculateDrawingRequirements(config);
   return baseRows.map((base, index) => {
     const reserveStart = Math.max(0, index - Math.max(0, config.skipHeadSpan));
     const reserve = baseRows.slice(reserveStart, index + 1).reduce((largest, row) => row.designTorque > largest.designTorque ? row : largest);

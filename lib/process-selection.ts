@@ -1,4 +1,5 @@
-import { calculateSelection, type SelectionConfig } from './motor-selection.ts';
+import { calculateDrawingRequirements, type SelectionConfig } from './motor-selection.ts';
+import { motorReferences } from './reference-data.ts';
 
 export interface ProcessCase {
   id: string;
@@ -17,6 +18,7 @@ export interface LoadPoint {
   torque: number; rpm: number; force: number; drum: number;
 }
 export interface CommonMotor {
+  reference?: string;
   station: number; requiredTorque: number; requiredRpm: number;
   torqueSource: string; speedSource: string; ratedTorque: number | null;
   ratedRpm: number | null; power: number | null; current: number | null;
@@ -50,22 +52,14 @@ export function processErrors(item: ProcessCase): string[] {
 
 /** Conservative constant-torque selection: every production and setup point is continuous.
  * No unverified overload/field-weakening capability is assumed. */
-export function selectCommonMotors(cases: ProcessCase[], equipment: SelectionConfig) {
+export function calculateProcessLoads(cases: ProcessCase[]) {
   const enabled = cases.filter(c => c.enabled);
   const errors = enabled.flatMap(processErrors);
   if (!enabled.length) errors.push('至少启用一项工艺');
-  for (const key of ['voltage', 'efficiency', 'powerFactor', 'voltageUtilization'] as const) {
-    if (!Number.isFinite(equipment[key]) || equipment[key] <= 0 || (key !== 'voltage' && equipment[key] > 1)) errors.push(`设备电气参数 ${key} 无效`);
-  }
-  if (!Number.isFinite(equipment.maxOverallLength) || equipment.maxOverallLength < 0) errors.push('允许总长必须为非负数');
-  if ([equipment.lowSpeedThreshold, equipment.lowSpeedMinFrame].some(x => !Number.isFinite(x) || x < 0)) errors.push('低速阈值和低速最小中心高必须为非负数');
-  const validCatalog = (list: number[]) => list.length > 0 && list.every(x => Number.isFinite(x) && x > 0);
-  if (!validCatalog(equipment.torqueCatalog) || !validCatalog(equipment.speedCatalog)) errors.push('转矩和转速档位库必须包含有效正数');
-  if (!equipment.frameRules.length || equipment.frameRules.some(f => ![f.frame, f.maxTorque, f.estimatedLength, f.poles].every(x => Number.isFinite(x) && x > 0) || f.poles % 2 !== 0)) errors.push('机座库必须包含正数参数，极数须为正偶数');
-  if (errors.length) return { errors, motors: [] as CommonMotor[] };
+  if (errors.length) return { errors, points: [] as LoadPoint[] };
   const points: LoadPoint[] = [];
   for (const item of enabled) {
-    const rows = calculateSelection(item.config);
+    const rows = calculateDrawingRequirements(item.config);
     rows.forEach((r, i) => {
       const station = item.stations[i];
       const previous = rows.slice(Math.max(0, i - item.config.skipHeadSpan), i + 1);
@@ -84,8 +78,36 @@ export function selectCommonMotors(cases: ProcessCase[], equipment: SelectionCon
     });
   }
   if (points.some(p => ![p.force, p.torque, p.rpm].every(Number.isFinite))) {
-    return { errors: ['输入量级过大，计算超出有效数值范围，请检查丝径、拉力和车速单位。'], motors: [] as CommonMotor[] };
+    return { errors: ['输入量级过大，计算超出有效数值范围，请检查丝径、拉力和车速单位。'], points: [] as LoadPoint[] };
   }
+  return { errors, points };
+}
+
+export function selectCommonMotors(cases: ProcessCase[], equipment: SelectionConfig) {
+  const { errors, points } = calculateProcessLoads(cases);
+  for (const key of ['voltage', 'efficiency', 'powerFactor', 'voltageUtilization'] as const) {
+    if (!Number.isFinite(equipment[key]) || equipment[key] <= 0 || (key !== 'voltage' && equipment[key] > 1)) errors.push(`设备电气参数 ${key} 无效`);
+  }
+  if (!Number.isFinite(equipment.maxOverallLength) || equipment.maxOverallLength < 0) errors.push('允许总长必须为非负数');
+  if ([equipment.lowSpeedThreshold, equipment.lowSpeedMinFrame, equipment.maxFrequency ?? 0].some(x => !Number.isFinite(x) || x < 0)) errors.push('低速规则与频率上限必须为非负数');
+  if (equipment.selectionMode === 'reference') {
+    if (errors.length) return {errors, motors: [] as CommonMotor[]};
+    const motors: CommonMotor[] = [...new Set(points.map(p=>p.station))].sort((a,b)=>a-b).map(station=>{
+      const loads=points.filter(p=>p.station===station);
+      const t=loads.reduce((a,b)=>a.torque>=b.torque?a:b), n=loads.reduce((a,b)=>a.rpm>=b.rpm?a:b);
+      const choice=equipment.stationChoices?.[station];
+      const mismatch=loads.some(p=>Math.abs(p.drum-loads[0].drum)>.001);
+      const candidates=motorReferences.filter(m=>m.torque>=t.torque && m.rpm>=n.rpm && (!choice?.frame || m.frame===choice.frame) && (!choice?.poles || m.poles===choice.poles) && (!equipment.maxFrequency || m.rpm*m.poles/120<=equipment.maxFrequency)).sort((a,b)=>a.torque*a.rpm-b.torque*b.rpm || a.frame-b.frame || a.id.localeCompare(b.id));
+      const m=equipment.maxOverallLength || mismatch ? undefined : candidates[0];
+      const power=m ? m.torque*m.rpm/9550 : null;
+      return {station,loads,requiredTorque:t.torque,requiredRpm:n.rpm,torqueSource:`${t.caseName} · ${t.kind}`,speedSource:`${n.caseName} · ${n.kind}`,ratedTorque:m?.torque??null,ratedRpm:m?.rpm??null,frame:m?.frame??null,poles:m?.poles??null,length:null,power,current:power===null?null:power*1000/(Math.sqrt(3)*equipment.voltage*equipment.efficiency*equipment.powerFactor*equipment.voltageUtilization),frequency:m?m.rpm*m.poles/120:null,reference:m?`${m.sheet}!C${m.row}:M${m.row}`:undefined,model:m?`${equipment.series}${m.frame}P${m.poles}-${m.torque}-${m.rpm}`:'待定制',status:m?'参考参数满足扭矩与转速；低速持续能力、尺寸待厂家确认':mismatch?'同一工位卷筒不一致':equipment.maxOverallLength?'附件无尺寸数据，无法确认总长约束':'52 条参考参数中无同时满足项，需定制或调整约束'};
+    });
+    return {errors,motors};
+  }
+  const validCatalog = (list: number[]) => list.length > 0 && list.every(x => Number.isFinite(x) && x > 0);
+  if (!validCatalog(equipment.torqueCatalog) || !validCatalog(equipment.speedCatalog)) errors.push('转矩和转速档位库必须包含有效正数');
+  if (!equipment.frameRules.length || equipment.frameRules.some(f => ![f.frame, f.maxTorque, f.estimatedLength, f.poles].every(x => Number.isFinite(x) && x > 0) || f.poles % 2 !== 0)) errors.push('机座库必须包含正数参数，极数须为正偶数');
+  if (errors.length) return { errors, motors: [] as CommonMotor[] };
   const pick = (value: number, catalog: number[]) => [...catalog].sort((a, b) => a - b).find(x => x >= value) ?? null;
   const motors: CommonMotor[] = [...new Set(points.map(p => p.station))].sort((a, b) => a - b).map(station => {
     const loads = points.filter(p => p.station === station);
@@ -96,16 +118,21 @@ export function selectCommonMotors(cases: ProcessCase[], equipment: SelectionCon
     const candidates = equipment.frameRules.filter(f => ratedTorque !== null && f.maxTorque >= ratedTorque
       && (ratedRpm === null || ratedRpm > equipment.lowSpeedThreshold || f.frame >= equipment.lowSpeedMinFrame)
       && (!equipment.maxOverallLength || f.estimatedLength <= equipment.maxOverallLength)).sort((a, b) => a.frame - b.frame || a.estimatedLength - b.estimatedLength);
-    const frame = candidates[0];
+    const choice = equipment.stationChoices?.[station];
+    const poleFits = (p: number) => Number.isInteger(p) && p > 0 && p % 2 === 0 && ratedRpm !== null && (!equipment.maxFrequency || ratedRpm * p / 120 <= equipment.maxFrequency) && (!choice?.poles || choice.poles === p);
+    const frame = choice?.frame ? candidates.find(f => f.frame === choice.frame) : candidates.find(f => (f.supportedPoles?.length ? f.supportedPoles : [f.poles]).some(poleFits));
+    const supported = frame ? (frame.supportedPoles?.length ? frame.supportedPoles : [frame.poles]) : [];
+    const allowedPoles = supported.filter(p => Number.isInteger(p) && p > 0 && p % 2 === 0 && ratedRpm !== null && (!equipment.maxFrequency || ratedRpm * p / 120 <= equipment.maxFrequency));
+    const poles = choice?.poles ? allowedPoles.find(p => p === choice.poles) : allowedPoles.includes(frame?.poles ?? 0) ? frame!.poles : allowedPoles[0];
     const drumMismatch = loads.some(p => Math.abs(p.drum - loads[0].drum) > 0.001);
-    const status = drumMismatch ? '同一工位卷筒不一致，请确认设备配置' : ratedTorque === null ? '转矩超出档位库，需定制' : ratedRpm === null ? '转速超出档位库，需定制' : !frame ? '无满足转矩和总长的机座' : '满足全部已录工况';
+    const status = drumMismatch ? '同一工位卷筒不一致，请确认设备配置' : ratedTorque === null ? '转矩超出档位库，需定制' : ratedRpm === null ? '转速超出档位库，需定制' : !frame ? '机座不满足转矩、总长或指定条件' : !poles ? '极数不在产品库内或超出频率上限' : '满足已录工况及产品库约束';
     const power = ratedTorque !== null && ratedRpm !== null ? ratedTorque * ratedRpm / 9550 : null;
     return { station, requiredTorque: t.torque, requiredRpm: n.rpm,
       torqueSource: `${t.caseName} · ${t.kind} · 第${t.pass}道`, speedSource: `${n.caseName} · ${n.kind} · 第${n.pass}道`,
       ratedTorque, ratedRpm, power, current: power === null ? null : power * 1000 / (Math.sqrt(3) * equipment.voltage * equipment.efficiency * equipment.powerFactor * equipment.voltageUtilization),
-      frame: frame?.frame ?? null, poles: frame?.poles ?? null, length: frame?.estimatedLength ?? null,
-      frequency: frame && ratedRpm !== null ? ratedRpm * frame.poles / 120 : null,
-      model: frame && ratedTorque !== null && ratedRpm !== null && !drumMismatch ? `${equipment.series}${frame.frame}P${frame.poles}-${ratedTorque}-${ratedRpm}-${Math.round(power!)}` : '待确认', status, loads };
+      frame: frame?.frame ?? null, poles: poles ?? null, length: frame?.estimatedLength ?? null,
+      frequency: poles && ratedRpm !== null ? ratedRpm * poles / 120 : null,
+      model: frame && poles && ratedTorque !== null && ratedRpm !== null && !drumMismatch ? `${equipment.series}${frame.frame}P${poles}-${ratedTorque}-${ratedRpm}-${Math.round(power!)}` : '待确认', status, loads };
   });
   return { errors, motors };
 }

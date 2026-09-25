@@ -1,13 +1,19 @@
 import type { SelectionConfig, SelectionRow } from "./motor-selection";
 import type { ProcessCase, CommonMotor } from './process-selection';
+import { calculateProcessLoads } from './process-selection.ts';
+import { motorReferences, recipes, referenceWorkbook } from './reference-data.ts';
 
 type Cell = string | number | null;
 
 export function buildProcessExcel(config: SelectionConfig, cases: ProcessCase[], motors: CommonMotor[]) {
   return workbook([
+    sheet('工艺扭矩转速需求', [
+      ['工艺', '实际工位', '道次', '负载类型', '拉拔力 N', '卷筒 mm', '所需扭矩 N·m', '所需转速 r/min'],
+      ...calculateProcessLoads(cases).points.map(p => [p.caseName,p.station,p.pass,p.kind,p.force,p.drum,p.torque,p.rpm]),
+    ]),
     sheet('兼容选型参数表', [
-      ['项目', '工位', '型号', '状态', '转矩 N·m', '转速 r/min', '功率 kW', '电流 A', '电压 V', '频率 Hz', '中心高', '极数', '总长 mm', '转矩决定工况', '转速决定工况'],
-      ...motors.map(m => [config.projectName, m.station, m.model, m.status, m.ratedTorque, m.ratedRpm, m.power, m.current, config.voltage, m.frequency, m.frame, m.poles, m.length, m.torqueSource, m.speedSource]),
+      ['项目', '工位', '型号', '状态', '转矩 N·m', '转速 r/min', '功率 kW', '估算电流 A', '电压 V', '频率 Hz', '中心高', '极数', '总长 mm', '转矩决定工况', '转速决定工况', '参考来源'],
+      ...motors.map(m => [config.projectName, m.station, m.model, m.status, m.ratedTorque, m.ratedRpm, m.power, m.current, config.voltage, m.frequency, m.frame, m.poles, m.length, m.torqueSource, m.speedSource, m.reference ?? '自定义规则']),
     ], [150, 50, 220, 220, 90, 90, 90, 90, 70, 80, 70, 60, 80, 240, 240]),
     sheet('工况覆盖明细', [
       ['工艺', '工位', '道次', '用途', '拉力 N', '卷筒 mm', '需求转矩 N·m', '需求转速 r/min', '转矩余量 N·m', '转速余量 r/min'],
@@ -18,12 +24,25 @@ export function buildProcessExcel(config: SelectionConfig, cases: ProcessCase[],
       ...cases.flatMap(c => c.config.passes.map((p, i) => [c.name, c.enabled ? '是' : '否', c.config.entryDiameter, c.config.finalSpeed, c.config.incomingStrength, c.config.firstPassFactor, c.config.steadyPassFactor, c.config.strengthFactor, c.config.forceCoefficient, c.config.skipHeadSpan, c.jogSpeed, c.jogFactor, c.jogForce, c.additionalTorque, c.stations[i], p.diameter, p.drumDiameter, p.measuredForce ?? '公式计算', p.safetyFactor ?? '全局系数'])),
     ]),
     sheet('设备选型依据', [
-      ['参数', '数值'], ['转矩档位 N·m', config.torqueCatalog.join(', ')], ['转速档位 r/min', config.speedCatalog.join(', ')], ['允许总长 mm', config.maxOverallLength], ['效率', config.efficiency], ['功率因数', config.powerFactor], ['电压利用率', config.voltageUtilization], ['低速阈值', config.lowSpeedThreshold], ['低速最小中心高', config.lowSpeedMinFrame],
+      ['参数', '数值'],
+      ['选型模式', config.selectionMode==='reference'?'52 条历史参数整条匹配，额定功率最小优先；尺寸及低速持续能力待确认':'自定义档位及机座规则'],
+      ['当前参考模板',config.referenceRecipe??'无'],
+      ['来源异常', '原表 9 处效率为 1.9，不参与电流计算。350 图片出线 0.63，配模末道 0.65；按实际配模计算。'],
+      ['电气频率上限 Hz（0未设限）', config.maxFrequency ?? 0],
+      ['逐工位指定机座与极数', JSON.stringify(config.stationChoices ?? {})],
+      ['转矩档位 N·m', config.torqueCatalog.join(', ')], ['转速档位 r/min', config.speedCatalog.join(', ')], ['允许总长 mm', config.maxOverallLength], ['效率', config.efficiency], ['功率因数', config.powerFactor], ['电压利用率', config.voltageUtilization], ['低速阈值', config.lowSpeedThreshold], ['低速最小中心高', config.lowSpeedMinFrame],
       ['选择原则', '生产、跳头和调模逐工位取最大转矩和最大转速；向上选最小标准档位；选择满足转矩和长度的最小中心高。均按连续恒转矩，不假设弱磁或短时过载。'],
       ['调模拉力为零', '使用该道计算拉拔力；调模转矩再乘调模系数并加附加阻力转矩'],
       ['型号与尺寸', '参数组合建议；尺寸为可编辑初始库，按厂家外形图确认'],
     ], [160, 500]),
-    sheet('机座库', [['中心高', '转矩能力 N·m', '预计总长 mm', '极数'], ...config.frameRules.map(f => [f.frame, f.maxTorque, f.estimatedLength, f.poles])]),
+    sheet('机座库', [['中心高', '转矩能力 N·m', '预计总长 mm', '默认极数', '可选极数'], ...config.frameRules.map(f => [f.frame, f.maxTorque, f.estimatedLength, f.poles, (f.supportedPoles ?? [f.poles]).join(',')])]),
+    ...(config.selectionMode==='reference' ? [sheet('附件历史参数',[
+      ['来源文件','工作表','行','机座','极数','额定转矩 N·m','额定转速 rpm','原表效率','效率状态'],
+      ...motorReferences.map(m=>[referenceWorkbook,m.sheet,m.row,m.frame,m.poles,m.torque,m.rpm,m.rawEfficiency,m.rawEfficiency>1?'异常，不参与计算':'历史值；计算仍使用全局效率']),
+    ]),sheet('图片工艺参考',[
+      ['来源','机型','进线 mm','配模 mm','设计 m/min','正常下限 m/min','正常上限 m/min','资料差异'],
+      ...recipes.map(r=>['124.jpg',r.id,r.entry,r.dies.join(' → '),r.design,...r.normal,r.warning??'无已知规格冲突']),
+    ])] : []),
   ]);
 }
 
