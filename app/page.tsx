@@ -21,20 +21,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProcessWorkbench } from "@/components/process-workbench";
+import { GeneralProcessPanel } from "@/components/general-process-panel";
+import { newGeneralConfig } from "@/lib/general-process";
 import { ReferencePanel } from "@/components/reference-panel";
 import {
   applyPreset,
   calculateDrawingRequirements,
-  defaultConfig,
   equalCompressionPasses,
-  lz7Passes,
   type MachinePreset,
   type SelectionConfig,
 } from "@/lib/motor-selection";
 
 const STORAGE_KEY = "direct-drive-selector:v1";
 const number = (value: string) => Number(value) || 0;
-const cloneDefaults = (): SelectionConfig => JSON.parse(JSON.stringify(defaultConfig)) as SelectionConfig;
+const cloneDefaults = (): SelectionConfig => newGeneralConfig();
 const parseCatalog = (value: string) => value.split(/[，,\s]+/).map(Number).filter((item) => Number.isFinite(item) && item > 0);
 
 export default function Home() {
@@ -48,7 +48,8 @@ export default function Home() {
     try {
       const stored = window.localStorage.getItem(STORAGE_KEY);
       if (stored) {
-        const restored = { ...cloneDefaults(), ...(JSON.parse(stored) as Partial<SelectionConfig>) };
+        const saved = JSON.parse(stored) as Partial<SelectionConfig>;
+        const restored = { ...cloneDefaults(), ...saved, equipmentDrums:saved.equipmentDrums, processStations:saved.processStations ?? saved.passes?.map((_,i)=>i+1) };
         queueMicrotask(() => setConfig(restored));
       }
     } catch {
@@ -86,8 +87,8 @@ export default function Home() {
             firstPassFactor: { type: "number", exclusiveMinimum: 0 },
             steadyPassFactor: { type: "number", exclusiveMinimum: 0 },
             maxOverallLength: { type: "number", minimum: 0 },
-            passDiameters: { type: "array", items: { type: "number", exclusiveMinimum: 0 }, minItems: 1, maxItems: 16 },
-            drumDiameters: { type: "array", items: { type: "number", exclusiveMinimum: 0 }, minItems: 1, maxItems: 16 },
+            passDiameters: { type: "array", items: { type: "number", exclusiveMinimum: 0 }, minItems: 1, maxItems: 128 },
+            drumDiameters: { type: "array", items: { type: "number", exclusiveMinimum: 0 }, minItems: 1, maxItems: 128 },
           },
           additionalProperties: false,
         },
@@ -130,7 +131,7 @@ export default function Home() {
   const setPreset = (preset: MachinePreset) => setConfig((old) => applyPreset(old, preset));
   const update = <K extends keyof SelectionConfig>(key: K, value: SelectionConfig[K]) => setConfig((old) => ({ ...old, [key]: value }));
   const updateCustom = <K extends keyof SelectionConfig>(key: K, value: SelectionConfig[K]) => setConfig((old) => ({ ...old, preset: "custom", [key]: value }));
-  const distribute = (count = config.passes.length) => update("passes", equalCompressionPasses(count, config.entryDiameter, config.finalDiameter, config.passes.at(-1)?.drumDiameter || 560));
+  const distribute = (count = config.passes.length) => setConfig(old => ({...old, processStations: Array.from({length:count},(_,i)=>i+1), passes: equalCompressionPasses(count, old.entryDiameter, old.finalDiameter, old.passes.at(-1)?.drumDiameter || 500).map((p,i)=>({...p,drumDiameter:old.equipmentDrums?.[i]??p.drumDiameter}))}));
   const reset = () => {
     window.localStorage.removeItem(STORAGE_KEY);
     setConfig(cloneDefaults());
@@ -146,7 +147,7 @@ export default function Home() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground md:flex"><Save className="size-3.5" />自动保存到本机</span>
-            <Button variant="outline" size="sm" onClick={reset}><RefreshCcw />重置示例</Button>
+            <Button variant="outline" size="sm" onClick={reset}><RefreshCcw />新建输入草稿</Button>
             <Button size="sm" onClick={() => setPhase('motor')}><Download />查看并导出选型</Button>
           </div>
         </div>
@@ -156,8 +157,8 @@ export default function Home() {
         <section className="mb-5 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
           <div>
             <div className="mb-2 flex items-center gap-2 text-xs font-medium text-primary"><span>工况定义</span><ChevronRight className="size-3.5"/><span>拉拔计算</span><ChevronRight className="size-3.5"/><span>电机初选</span></div>
-            <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">从拉拔工艺直接得到电机规格</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">按附件模型联动计算压缩率、拉拔力、转矩、转速与功率；工艺、系数、标准档位和尺寸库均可调整。</p>
+            <h1 className="font-heading text-2xl font-semibold tracking-tight sm:text-3xl">通用拉丝设备 · 多工艺电机选型</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">设备分组 → 配模与工位映射 → 多工艺负载汇总 → 电机参数；历史 Excel 只作校核参考，不限制设备类型。</p>
           </div>
           <div className="flex flex-wrap gap-1.5 rounded-xl border bg-card p-1.5 shadow-sm">
             {(["standard", "universal", "custom"] as MachinePreset[]).map((preset) => (
@@ -170,9 +171,10 @@ export default function Home() {
 
         <Tabs value={phase} onValueChange={setPhase} className="mb-5"><TabsList><TabsTrigger value="input">1 · 工艺输入</TabsTrigger><TabsTrigger value="demand">2 · 扭矩与转速需求</TabsTrigger><TabsTrigger value="motor">3 · 机座与极数</TabsTrigger></TabsList></Tabs>
         <details className="mb-5 rounded-lg border p-4 text-sm leading-7"><summary className="cursor-pointer font-medium">Excel 选型思路与系统对应关系</summary><p>工艺表 5.5~3.25：G列按截面积守恒计算车速，J列按平均抗拉强度计算拉拔力，L列计算卷筒转矩，N列计算转速，O列乘安全系数。先得到需求，再取电机额定档位。</p><p>电机选型表：C列中心高、F列额定转速、G列额定转矩、M列极数均为人工填写；E列按 T×n/9550 算功率，J列按 n×极数/120 算频率。原表没有通用机座与极数推导公式。</p><p>原表六道工艺另列了第七台电机，但没有对应六道表的第七道拉拔计算。系统按实际录入和工位映射计算，不自动补造第七道工艺。机座尺寸和能力初始库需用实际产品资料核准。</p></details>
-        <ProcessWorkbench config={config} onLoad={setConfig} phase={phase} />
+        <ProcessWorkbench config={config} onLoad={setConfig} onEdit={()=>setPhase('input')} phase={phase} />
         <div className={phase === 'input' ? 'grid gap-5' : 'hidden'}>
-          <ReferencePanel config={config} onChange={setConfig} />
+          <GeneralProcessPanel config={config} onChange={setConfig} />
+          <details><summary className="cursor-pointer text-sm text-muted-foreground">历史项目参考（选用，不作为通用模板）</summary><ReferencePanel config={config} onChange={setConfig} /></details>
           <aside className="grid items-start gap-5 lg:grid-cols-3">
             <Card className="shadow-sm">
               <CardHeader className="border-b"><CardTitle className="flex items-center gap-2"><Factory className="size-4 text-primary"/>基础工况</CardTitle><CardDescription>输入边界后即刻重新计算。</CardDescription></CardHeader>
@@ -182,28 +184,27 @@ export default function Home() {
                 <Field label="材料"><Input value={config.material} onChange={(e) => update("material", e.target.value)} /></Field>
                 <Field label="进线直径" unit="mm"><Input type="number" min="0.01" step="0.01" value={config.entryDiameter} onChange={(e) => update("entryDiameter", number(e.target.value))} /></Field>
                 <Field label="出线直径" unit="mm"><Input type="number" min="0.01" step="0.01" value={config.finalDiameter} onChange={(e) => update("finalDiameter", number(e.target.value))} /></Field>
-                <Field label="成品线速" unit="m/s"><Input type="number" min="0.01" step="0.1" value={config.finalSpeed} onChange={(e) => update("finalSpeed", number(e.target.value))} /></Field>
+                <Field label="成品线速" unit="m/min"><Input type="number" min="0.01" step="0.1" value={Number((config.finalSpeed*60).toFixed(6))} onChange={(e) => update("finalSpeed", number(e.target.value)/60)} /></Field>
                 <Field label="进线强度" unit="MPa"><Input type="number" min="1" step="10" value={config.incomingStrength} onChange={(e) => update("incomingStrength", number(e.target.value))} /></Field>
                 <Field label="最大允许总长" unit="mm"><Input type="number" min="0" step="10" value={config.maxOverallLength} onChange={(e) => update("maxOverallLength", number(e.target.value))} /></Field>
               </CardContent>
             </Card>
 
             <Card className="shadow-sm">
-              <CardHeader className="border-b"><div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2"><Activity className="size-4 text-primary"/>道次工艺</CardTitle><CardDescription>1～16 道自由配置；末道对应成品线速。</CardDescription></div><div className="flex gap-1"><Button variant="outline" size="icon-sm" aria-label="减少一道" disabled={config.passes.length <= 1} onClick={() => distribute(config.passes.length - 1)}><Minus /></Button><Button variant="outline" size="icon-sm" aria-label="增加一道" disabled={config.passes.length >= 16} onClick={() => distribute(config.passes.length + 1)}><Plus /></Button></div></div></CardHeader>
+              <CardHeader className="border-b"><div className="flex items-start justify-between gap-3"><div><CardTitle className="flex items-center gap-2"><Activity className="size-4 text-primary"/>道次工艺</CardTitle><CardDescription>1～128 道自由配置；末道对应成品线速。</CardDescription></div><div className="flex gap-1"><Button variant="outline" size="icon-sm" aria-label="减少一道" disabled={config.passes.length <= 1} onClick={() => distribute(config.passes.length - 1)}><Minus /></Button><Button variant="outline" size="icon-sm" aria-label="增加一道" disabled={config.passes.length >= 128} onClick={() => distribute(config.passes.length + 1)}><Plus /></Button></div></div></CardHeader>
               <CardContent className="space-y-2 pt-1">
                 <div className="mb-3 flex items-center justify-between rounded-lg bg-muted/65 px-3 py-2"><span className="text-xs text-muted-foreground">当前 <b className="text-foreground">{config.passes.length} 道</b></span><Button variant="ghost" size="xs" onClick={() => distribute()}><Sparkles />均匀分配压缩率</Button></div>
                 <div className="grid grid-cols-[36px_1fr_1fr] gap-2 px-1 text-[11px] font-medium text-muted-foreground"><span>道次</span><span>丝径 mm</span><span>卷筒 mm</span></div>
                 {config.passes.map((pass, index) => (
                   <div key={index} className="rounded-lg border p-2"><div className="grid grid-cols-[36px_1fr_1fr] items-center gap-2"><span className="grid size-7 place-items-center rounded-lg bg-muted text-sm font-semibold">{index + 1}</span><Input aria-label={`第${index + 1}道丝径 mm`} type="number" min="0.001" step="0.01" value={pass.diameter} onChange={(e) => update("passes", config.passes.map((item, i) => i === index ? { ...item, diameter: number(e.target.value) } : item))} /><Input aria-label={`第${index + 1}道卷筒 mm`} type="number" min="1" step="10" value={pass.drumDiameter} onChange={(e) => update("passes", config.passes.map((item, i) => i === index ? { ...item, drumDiameter: number(e.target.value) } : item))} /></div><div className="mt-2 grid grid-cols-2 gap-2"><label htmlFor={`force-${index}`} className="text-sm">实测拉拔力 N<Input id={`force-${index}`} type="number" min="0" placeholder="留空按公式计算" value={pass.measuredForce ?? ''} onChange={e => update('passes', config.passes.map((p, i) => i === index ? { ...p, measuredForce: e.target.value === '' ? undefined : Number(e.target.value) } : p))}/></label><label htmlFor={`factor-${index}`} className="text-sm">独立安全系数<Input id={`factor-${index}`} type="number" min="0.01" step="0.05" placeholder="留空使用全局系数" value={pass.safetyFactor ?? ''} onChange={e => update('passes', config.passes.map((p, i) => i === index ? { ...p, safetyFactor: e.target.value === '' ? undefined : Number(e.target.value) } : p))}/></label></div></div>
                 ))}
-                <Button variant="outline" className="mt-2 w-full" size="sm" onClick={() => update("passes", lz7Passes.map((item) => ({ ...item })))}><RefreshCcw />恢复附件 LZ7 六道次</Button>
               </CardContent>
             </Card>
 
             <details id="advanced-settings" className="engineering-details rounded-xl border bg-card shadow-sm" open>
               <summary><span><SlidersHorizontal className="size-4 text-primary"/><b>工程参数</b><small>系数、电气与校核边界</small></span><ChevronDown className="size-4"/></summary>
               <div className="grid grid-cols-2 gap-4 border-t p-4">
-                <Field label="首道安全系数"><Input type="number" min="0.1" max="5" step="0.05" value={config.firstPassFactor} onChange={(e) => updateCustom("firstPassFactor", number(e.target.value))} /></Field>
+                <Field label="首道安全系数"><Input type="number" min="0.1" max="128" step="0.05" value={config.firstPassFactor} onChange={(e) => updateCustom("firstPassFactor", number(e.target.value))} /></Field>
                 <Field label="后续道安全系数"><Input type="number" min="0.1" max="5" step="0.05" value={config.steadyPassFactor} onChange={(e) => updateCustom("steadyPassFactor", number(e.target.value))} /></Field>
                 <Field label="跳头覆盖道数"><Input type="number" min="0" max="5" step="1" value={config.skipHeadSpan} onChange={(e) => updateCustom("skipHeadSpan", Math.round(number(e.target.value)))} /></Field>
                 <Field label="增强系数 K"><Input type="number" min="0.5" max="2" step="0.01" value={config.strengthFactor} onChange={(e) => updateCustom("strengthFactor", number(e.target.value))} /></Field>

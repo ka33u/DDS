@@ -9,7 +9,7 @@ export function buildProcessExcel(config: SelectionConfig, cases: ProcessCase[],
   return workbook([
     sheet('工艺扭矩转速需求', [
       ['工艺', '实际工位', '道次', '负载类型', '拉拔力 N', '卷筒 mm', '所需扭矩 N·m', '所需转速 r/min'],
-      ...calculateProcessLoads(cases).points.map(p => [p.caseName,p.station,p.pass,p.kind,p.force,p.drum,p.torque,p.rpm]),
+      ...calculateProcessLoads(cases,config).points.map(p => [p.caseName,p.station,p.pass,p.kind,p.force,p.drum,p.torque,p.rpm]),
     ]),
     sheet('兼容选型参数表', [
       ['项目', '工位', '型号', '状态', '转矩 N·m', '转速 r/min', '功率 kW', '估算电流 A', '电压 V', '频率 Hz', '中心高', '极数', '总长 mm', '转矩决定工况', '转速决定工况', '参考来源'],
@@ -20,11 +20,14 @@ export function buildProcessExcel(config: SelectionConfig, cases: ProcessCase[],
       ...motors.flatMap(m => m.loads.map(p => [p.caseName, p.station, p.pass, p.kind, p.force, p.drum, p.torque, p.rpm, m.ratedTorque === null ? null : m.ratedTorque - p.torque, m.ratedRpm === null ? null : m.ratedRpm - p.rpm])),
     ]),
     sheet('工艺输入', [
-      ['工艺', '启用', '进径 mm', '成品车速 m/s', '进线强度 MPa', '首道系数', '后道系数', 'K', '拉力系数', '跳头跨度', '调模 m/s', '调模系数', '调模拉力 N', '附加转矩 N·m', '工位', '丝径 mm', '卷筒 mm', '实测拉拔力 N', '独立安全系数'],
-      ...cases.flatMap(c => c.config.passes.map((p, i) => [c.name, c.enabled ? '是' : '否', c.config.entryDiameter, c.config.finalSpeed, c.config.incomingStrength, c.config.firstPassFactor, c.config.steadyPassFactor, c.config.strengthFactor, c.config.forceCoefficient, c.config.skipHeadSpan, c.jogSpeed, c.jogFactor, c.jogForce, c.additionalTorque, c.stations[i], p.diameter, p.drumDiameter, p.measuredForce ?? '公式计算', p.safetyFactor ?? '全局系数'])),
+      ['工艺', '启用', '进径 mm', '成品车速 m/s', '进线强度 MPa', '首道系数', '后道系数', 'K', '拉力系数', '跳头跨度', '调模 m/s', '调模系数', '调模拉力 N', '附加转矩 N·m', '工位', '丝径 mm', '卷筒 mm', '实测拉拔力 N', '独立安全系数', '设备分组','拉力模型','强化指数','机械效率','共驱线数','逐道线速 m/s'],
+      ...cases.flatMap(c => c.config.passes.map((p, i) => [c.name, c.enabled ? '是' : '否', c.config.entryDiameter, c.config.finalSpeed, c.config.incomingStrength, c.config.firstPassFactor, c.config.steadyPassFactor, c.config.strengthFactor, c.config.forceCoefficient, c.config.skipHeadSpan, c.jogSpeed, c.jogFactor, c.jogForce, c.additionalTorque, c.stations[i], p.diameter, p.drumDiameter, p.measuredForce ?? '公式计算', p.safetyFactor ?? '全局系数',c.config.deviceName??'设备1',c.config.forceModel??'average',c.config.strengthExponent??.5,c.config.drawingEfficiency??1,c.config.parallelWires??1,p.lineSpeed??'截面积守恒'])),
     ]),
     sheet('设备选型依据', [
       ['参数', '数值'],
+      ['设备名称',config.deviceName??'设备1'],
+      ['固定工位卷筒 mm',config.equipmentDrums?.join(', ')??'未设定'],
+      ['工艺校核错误',calculateProcessLoads(cases,config).errors.join('；')||'无'],
       ['选型模式', config.selectionMode==='reference'?'52 条历史参数整条匹配，额定功率最小优先；尺寸及低速持续能力待确认':'自定义档位及机座规则'],
       ['当前参考模板',config.referenceRecipe??'无'],
       ['来源异常', '原表 9 处效率为 1.9，不参与电流计算。350 图片出线 0.63，配模末道 0.65；按实际配模计算。'],

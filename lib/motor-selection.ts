@@ -1,6 +1,7 @@
 export type MachinePreset = "standard" | "universal" | "custom";
 
 export interface DrawingPass {
+  lineSpeed?: number;
   diameter: number;
   drumDiameter: number;
   measuredForce?: number;
@@ -16,6 +17,13 @@ export interface FrameRule {
 }
 
 export interface SelectionConfig {
+  deviceName?: string;
+  equipmentDrums?: number[];
+  processStations?: number[];
+  forceModel?: 'average' | 'incoming' | 'measured';
+  strengthExponent?: number;
+  drawingEfficiency?: number;
+  parallelWires?: number;
   selectionMode?: 'custom' | 'reference';
   referenceRecipe?: string;
   maxFrequency?: number;
@@ -186,30 +194,31 @@ export function applyPreset(config: SelectionConfig, preset: MachinePreset) {
 }
 
 export function equalCompressionPasses(count: number, entryDiameter: number, finalDiameter: number, drumDiameter: number) {
-  const safeCount = Math.max(1, Math.min(16, Math.round(count)));
+  const safeCount = Math.max(1, Math.min(128, Math.round(count)));
   const ratio = Math.pow(finalDiameter / entryDiameter, 1 / safeCount);
   return Array.from({ length: safeCount }, (_, index) => ({
-    diameter: Number((entryDiameter * Math.pow(ratio, index + 1)).toFixed(3)),
+    diameter: Number((entryDiameter * Math.pow(ratio, index + 1)).toPrecision(12)),
     drumDiameter,
   }));
 }
 
 export function calculateDrawingRequirements(config: SelectionConfig) {
-  const activePasses = config.passes.filter((pass) => pass.diameter > 0 && pass.drumDiameter > 0).slice(0, 16);
+  const activePasses = config.passes.slice(0, 128);
   if (!activePasses.length) return [];
   const actualFinalDiameter = activePasses.at(-1)!.diameter;
 
   return activePasses.map((pass, index) => {
     const incomingDiameter = index === 0 ? config.entryDiameter : activePasses[index - 1].diameter;
     const compression = 1 - Math.pow(pass.diameter / incomingDiameter, 2);
-    const strengthBefore = index === 0 ? config.incomingStrength : config.incomingStrength * Math.sqrt(config.entryDiameter / incomingDiameter) * config.strengthFactor;
-    const strengthAfter = config.incomingStrength * Math.sqrt(config.entryDiameter / pass.diameter) * config.strengthFactor;
-    const lineSpeed = config.finalSpeed * Math.pow(actualFinalDiameter / pass.diameter, 2);
+    const exponent = config.strengthExponent ?? 0.5;
+    const strengthBefore = index === 0 ? config.incomingStrength : config.incomingStrength * Math.pow(config.entryDiameter / incomingDiameter, exponent) * config.strengthFactor;
+    const strengthAfter = config.incomingStrength * Math.pow(config.entryDiameter / pass.diameter, exponent) * config.strengthFactor;
+    const lineSpeed = pass.lineSpeed ?? config.finalSpeed * Math.pow(actualFinalDiameter / pass.diameter, 2);
     const calculatedForce = compression > 0
-      ? config.forceCoefficient * Math.pow(incomingDiameter, 2) * ((strengthBefore + strengthAfter) / 2) * Math.sqrt(compression)
+      ? config.forceCoefficient * Math.pow(incomingDiameter, 2) * (config.forceModel === 'incoming' ? strengthBefore : (strengthBefore + strengthAfter) / 2) * Math.sqrt(compression)
       : 0;
-    const drawingForce = pass.measuredForce ?? calculatedForce;
-    const drawingTorque = (drawingForce * pass.drumDiameter) / 2000;
+    const drawingForce = (pass.measuredForce ?? (config.forceModel === 'measured' ? NaN : calculatedForce)) * (config.parallelWires ?? 1);
+    const drawingTorque = (drawingForce * pass.drumDiameter) / (2000 * (config.drawingEfficiency ?? 1));
     const factor = pass.safetyFactor ?? (index === 0 ? config.firstPassFactor : config.steadyPassFactor);
     const designTorque = drawingTorque * factor;
     const designRpm = (lineSpeed / (Math.PI * (pass.drumDiameter / 1000))) * 60;
