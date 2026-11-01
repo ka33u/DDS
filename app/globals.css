@@ -2,6 +2,42 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Compact worksheet: 13 passes fit a 1280px desktop viewport. */
+.matrix-workspace { padding: 20px 16px; display: flex; flex-direction: column; gap: 20px; background: #f5f8f9; }
+.matrix-workspace header { padding: 0 2px; }
+.matrix-toolbar { padding: 12px 14px; box-shadow: 0 2px 8px #17222c04; }
+.matrix-toolbar input { height: 32px; width: 90px; }
+.matrix-section h2 { font-size: 15px; }
+.matrix-section > p { font-size: 12px; line-height: 1.6; }
+.matrix-section > div { box-shadow: 0 3px 12px #17222c05; }
+.matrix-workspace table { table-layout: fixed; font-size: 12px; }
+.matrix-workspace th, .matrix-workspace td { padding: 6px 4px; min-width: 0; white-space: normal; }
+.matrix-workspace th { background: #edf4f4; text-align: center; color: #426169; height: 52px; }
+.matrix-workspace th small { font-size: 10px; font-weight: 400; color: #65737c; }
+.matrix-workspace td { text-align: center; }
+.matrix-workspace tbody tr:nth-child(even):not(:last-child) { background: #f8fafb; }
+.matrix-workspace table input { width: 100%; min-width: 0; height: 29px; padding: 3px; border-radius: 5px; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; box-shadow: none; background: #fff; }
+.matrix-workspace table input[type=number] { appearance: textfield; -moz-appearance: textfield; }
+.matrix-workspace table input::-webkit-inner-spin-button, .matrix-workspace table input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.matrix-workspace table input:focus { position: relative; z-index: 2; outline: 2px solid #3f8a90; outline-offset: 0; }
+.matrix-pair, .matrix-speed { display: flex; flex-direction: column; gap: 4px; }
+.matrix-pair input:last-child { background: #f1f6f7; color: #49646d; }
+.matrix-speed button { height: 25px; padding: 0 4px; font-size: 10px; }
+.matrix-actions { display: flex; flex-direction: column; gap: 1px; }
+.matrix-actions button { height: 23px; padding: 0 2px; font-size: 11px; }
+.matrix-actions button:last-child { color: #ad554b; }
+.pass-number { display: block; color: #1f5660; font-size: 14px; font-weight: 650; letter-spacing: .04em; }
+.pass-label { display: block; font-size: 10px; font-weight: 400; margin-top: 2px; }
+.matrix-torque, .matrix-rpm { display: block; line-height: 24px; overflow-wrap: anywhere; }
+.matrix-torque { font-weight: 650; color: #174d53; }
+.matrix-rpm { color: #536c7a; border-top: 1px solid #dbe5e880; }
+.matrix-source { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: 10px; font-weight: 400; color: #65737c; line-height: 16px; }
+.matrix-errors { text-align: left; padding: 6px; line-height: 1.7; }
+.matrix-errors summary { cursor: pointer; color: #976215; }
+.matrix-errors p { padding-top: 6px; color: #a65b53; }
+.skip-label { display: inline-block; font-size: 10px; color: #976215; background: #fff4dd; border-radius: 3px; padding: 0 4px; }
+@media (max-width: 640px) { .matrix-workspace { padding: 12px 8px; gap: 16px; } }
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
