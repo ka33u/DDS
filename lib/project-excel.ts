@@ -11,9 +11,9 @@ function styleSheet(sheet:ExcelJS.Worksheet,headerRow=1){
 }
 function addInputs(wb:ExcelJS.Workbook,data:ProjectData,blank:boolean){
   const info=wb.addWorksheet('项目信息');
-  info.addRows([['直驱选型 · 输入表','DDS-INPUT-V1'],['项目名',data.info.projectName],['客户名称',data.info.customerName],['总模数',data.settings.count],['首道次扭矩系数',Number(data.settings.first)],['其他道次扭矩系数',Number(data.settings.other)]]);
+  info.addRows([['直驱选型 · 输入表','DDS-INPUT-V2'],['项目名',data.info.projectName],['客户名称',data.info.customerName],['总模数',data.settings.count]]);
   styleSheet(info);info.getColumn(1).width=30;info.getColumn(2).width=48;
-  for(let r=2;r<=6;r++)info.getCell(r,2).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF3D5'}};
+  for(let r=2;r<=4;r++)info.getCell(r,2).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF3D5'}};
   const input=wb.addWorksheet('工艺输入');input.addRow(headers(data.settings.count));
   if(blank){for(let i=0;i<5;i++)input.addRow(Array(4+data.settings.count*2).fill(''));}
   else for(const p of data.processes.map(speedInMetresPerSecond))input.addRow([p.name,Number(p.entry),Number(p.strength),Number(p.speed),...Array.from({length:data.settings.count},(_,i)=>[Number(p.dies[i]),Number(p.drums[i])]).flat()]);
@@ -26,13 +26,13 @@ function addInputs(wb:ExcelJS.Workbook,data:ProjectData,blank:boolean){
     ['输入单位','线径、模具和滚筒均为mm；抗拉强度为进线强度MPa；下线速度为m/s。填写纯数值，不要在数值后附加单位。'],
     ['跳模','本道模具尺寸与上道相同即跳模，首道与进线规格比较。跳模也要填写滚筒直径。'],
     ['完整性','每套工艺必须填写全部道次；模具不得大于前一道尺寸。请填写数值，不使用公式或合并单元格。'],
-    ['系数','默认首道1.4、其他道1.3，均可按需求修改；必须为正数。'],
     ['导入','保存为.xlsx后点击系统的一键导入。全部校验通过才替换当前项目；导入后可撤销。'],
     ['结果','先跨工艺分别取各道最大扭矩、最大转速，再向上取到5的倍数；总扭矩为各道取整扭矩之和。'],
     ['计算边界','经验拉拔力模型需按材料验证；跳模理论拉拔扭矩为0，未含摩擦、加速、张力及调模附加载荷。']
   ]);styleSheet(help);help.getColumn(2).width=105;help.eachRow((row,i)=>{if(i>1)row.height=42;});
 }
 export async function makeProjectExcel(data:ProjectData,template=false):Promise<ArrayBuffer>{
+  if(!Number.isInteger(data.settings.count)||data.settings.count<1||data.settings.count>128)throw new Error('请先选择1～128的整数模数。');
   const wb=new ExcelJS.Workbook();wb.creator='直驱选型';
   if(!template){
     const result=calculateMatrix(data.settings,data.processes);if(!result.valid)throw new Error('请先补齐全部工艺参数再导出。');
@@ -43,17 +43,17 @@ export async function makeProjectExcel(data:ProjectData,template=false):Promise<
   addInputs(wb,data,template);
   return await wb.xlsx.writeBuffer() as unknown as ArrayBuffer;
 }
-export async function readProjectExcel(buffer:ArrayBuffer):Promise<ProjectData>{
+export async function readProjectExcel(buffer:ArrayBuffer,coefficients:Pick<MatrixSettings,'first'|'other'>={first:'1.4',other:'1.3'}):Promise<ProjectData>{
   if(buffer.byteLength>20*1024*1024)throw new Error('文件不能超过20MB。');
   const wb=new ExcelJS.Workbook();try{await wb.xlsx.load(buffer);}catch{throw new Error('无法读取Excel，请使用下载的标准模板并保存为.xlsx格式。');}
   const info=wb.getWorksheet('项目信息'),input=wb.getWorksheet('工艺输入');
   if(!info||!input)throw new Error('缺少“项目信息”或“工艺输入”工作表，请使用标准模板。');
   const text=(cell:ExcelJS.Cell)=>{const v=cell.value;if(v===null||v===undefined)return '';if(typeof v==='string'||typeof v==='number')return String(v).trim();throw new Error(`${cell.worksheet.name}!${cell.address} 请填写文本或数值，不支持公式、日期或其他对象。`);};
-  if(text(info.getCell('B1'))!=='DDS-INPUT-V1')throw new Error('模板版本不匹配，请重新下载标准模板。');
-  ['项目名','客户名称','总模数','首道次扭矩系数','其他道次扭矩系数'].forEach((label,i)=>{if(text(info.getCell(i+2,1))!==label)throw new Error(`项目信息!A${i+2} 应为“${label}”，请勿修改模板字段。`);});
+  if(!['DDS-INPUT-V1','DDS-INPUT-V2'].includes(text(info.getCell('B1'))))throw new Error('模板版本不匹配，请重新下载标准模板。');
+  ['项目名','客户名称','总模数'].forEach((label,i)=>{if(text(info.getCell(i+2,1))!==label)throw new Error(`项目信息!A${i+2} 应为“${label}”，请勿修改模板字段。`);});
   const project={projectName:text(info.getCell('B2')),customerName:text(info.getCell('B3'))};
   if(!project.projectName||!project.customerName)throw new Error('请填写项目信息中的项目名（B2）和客户名称（B3）。');
-  const settings={count:Number(text(info.getCell('B4'))),first:text(info.getCell('B5')),other:text(info.getCell('B6'))};
+  const settings={count:Number(text(info.getCell('B4'))),first:coefficients.first,other:coefficients.other};
   const settingErrors=calculateMatrix(settings,[]).settingsErrors;if(settingErrors.length)throw new Error('项目信息：'+settingErrors.join('；'));
   const expected=headers(settings.count);
   expected.forEach((h,i)=>{if(text(input.getCell(1,i+1))!==h)throw new Error(`工艺输入!${input.getCell(1,i+1).address} 应为“${h}”，请检查表头和总模数。`);});

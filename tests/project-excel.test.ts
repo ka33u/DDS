@@ -14,9 +14,21 @@ test('result workbook contains customer and project, integer results and reimpor
 });
 test('customer can fill template, add rows and import all processes',async()=>{
  const wb=await book(await makeProjectExcel(data,true));assert.equal(wb.getWorksheet('取整综合最大值'),undefined);
+ assert.equal(wb.getWorksheet('项目信息')!.rowCount,4);
+ assert.equal(wb.getWorksheet('项目信息')!.getCell('B1').value,'DDS-INPUT-V2');
  const sheet=wb.getWorksheet('工艺输入')!;assert.equal(sheet.getCell('B2').value,'');
  sheet.getRow(2).values=['工艺1',5.5,1100,8,5,560,5,560];sheet.getRow(8).values=['工艺2',5.5,1000,10,5,560,4.5,560];
  const imported=await readProjectExcel(await wb.xlsx.writeBuffer() as unknown as ArrayBuffer);assert.equal(imported.processes.length,2);assert.equal(imported.processes[1].speed,'10');
+});
+test('legacy coefficients never override system settings and template count is independent',async()=>{
+ const wb=await book(await makeProjectExcel(data));
+ const info=wb.getWorksheet('项目信息')!;info.getCell('B1').value='DDS-INPUT-V1';info.getCell('A5').value='首道次扭矩系数';info.getCell('B5').value=99;info.getCell('A6').value='其他道次扭矩系数';info.getCell('B6').value=88;
+ const imported=await readProjectExcel(await wb.xlsx.writeBuffer() as unknown as ArrayBuffer,{first:'1.6',other:'1.2'});
+ assert.deepEqual(imported.settings,{count:2,first:'1.6',other:'1.2'});
+ const template=await book(await makeProjectExcel({...data,settings:{count:13,first:'',other:''}},true));
+ assert.equal(template.getWorksheet('项目信息')!.getCell('B4').value,13);
+ assert.equal(template.getWorksheet('工艺输入')!.getRow(1).cellCount,30);
+ await assert.rejects(()=>makeProjectExcel({...data,settings:{...data.settings,count:0}},true));
 });
 test('invalid units, missing names, formulas, changed headers and partial rows reject the whole import',async()=>{
  for(const modify of [

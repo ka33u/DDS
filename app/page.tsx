@@ -12,6 +12,8 @@ export default function Home(){
   const [count,setCount]=useState('7'),[processes,setProcesses]=useState<MatrixProcess[]>([]);
   const [info,setInfo]=useState<ProjectInfo>({projectName:'',customerName:''});
   const [busy,setBusy]=useState(false),[importError,setImportError]=useState(''),[undo,setUndo]=useState<ProjectData|null>(null);
+  const templateDialog=useRef<HTMLDialogElement>(null);
+  const [templateCount,setTemplateCount]=useState('');
   const fileInput=useRef<HTMLInputElement>(null);
   const [ready,setReady]=useState(false),[message,setMessage]=useState('');
   useEffect(()=>{let saved:{settings:MatrixSettings;processes:MatrixProcess[];info?:ProjectInfo}|undefined;
@@ -25,16 +27,16 @@ export default function Home(){
   const update=(id:string,patch:Partial<MatrixProcess>)=>setProcesses(old=>old.map(p=>p.id===id?{...p,...patch}:p));
   const numeric=(p:MatrixProcess,field:'entry'|'strength'|'speed')=><Input aria-label={p.name+' '+field} className="" type="number" min="0" step="any" value={p[field]} onChange={e=>update(p.id,{[field]:e.target.value})}/>;
   const applyCount=()=>{const n=Number(count);if(!Number.isInteger(n)||n<1||n>128){setMessage('总模数须为1～128的整数。');return;}setSettings(s=>({...s,count:n}));setProcesses(old=>old.map(p=>({...p,dies:Array.from({length:Math.max(n,p.dies.length)},(_,i)=>p.dies[i]??''),drums:Array.from({length:Math.max(n,p.drums.length)},(_,i)=>p.drums[i]??p.drums.at(-1)??'')})));setMessage('模数已应用。减少模数只隐藏后续数据，重新增加可恢复；末个可见道次为下线道次。');};
-  const download=async(template=false)=>{
-    if(Number(count)!==settings.count){setMessage('请先应用总模数，再下载表格。');return;}
+  const download=async(template=false,selectedCount=settings.count)=>{
+    if(!template&&Number(count)!==settings.count){setMessage('请先应用总模数，再下载表格。');return;}
     setBusy(true);setImportError('');
     try{
       const {makeProjectExcel}=await import('@/lib/project-excel');
-      const buffer=await makeProjectExcel({info,settings,processes},template);
+      const buffer=await makeProjectExcel({info,settings:template?{...settings,count:selectedCount}:settings,processes},template);
       const url=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
       const a=document.createElement('a');a.href=url;
       const name=[info.projectName,info.customerName,template?'标准工艺输入模板':'直驱选型参数表'].filter(Boolean).join('_').replace(/[\\/:*?"<>|]/g,'_');
-      a.download=name+'.xlsx';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      a.download=name+(template?'_'+selectedCount+'模':'')+'.xlsx';a.click();if(template)templateDialog.current?.close();setTimeout(()=>URL.revokeObjectURL(url),1000);
     }catch(e){setImportError(e instanceof Error?e.message:'表格生成失败，请重试。');}finally{setBusy(false);}
   };
   const importFile=async(file:File)=>{
@@ -43,21 +45,30 @@ export default function Home(){
       if(!file.name.toLowerCase().endsWith('.xlsx'))throw new Error('请选择.xlsx格式的标准输入表。');
       if(file.size>20*1024*1024)throw new Error('文件不能超过20MB。');
       const {readProjectExcel}=await import('@/lib/project-excel');
-      const data=await readProjectExcel(await file.arrayBuffer());
-      setUndo(structuredClone({info,settings,processes}));setInfo(data.info);setSettings(data.settings);setCount(String(data.settings.count));setProcesses(data.processes);
+      const data=await readProjectExcel(await file.arrayBuffer(),settings);
+      setUndo(structuredClone({info,settings,processes}));setInfo(data.info);setSettings(current=>({...current,count:data.settings.count}));setCount(String(data.settings.count));setProcesses(data.processes);
       setMessage('已导入 '+data.processes.length+' 套工艺，'+data.settings.count+' 道；已替换当前项目，可撤销本次导入。');
     }catch(e){setImportError(e instanceof Error?e.message:'导入失败，请检查文件。');}finally{setBusy(false);if(fileInput.current)fileInput.current.value='';}
   };
   return <main className="matrix-workspace min-h-screen text-foreground">
+    <dialog ref={templateDialog} className="m-auto w-[min(420px,calc(100vw-32px))] rounded-xl border bg-card p-6 text-foreground shadow-xl backdrop:bg-black/30" aria-labelledby="template-title">
+      <form onSubmit={e=>{e.preventDefault();void download(true,Number(templateCount));}}>
+        <h2 id="template-title" className="text-lg font-semibold">请先选择模板模数</h2>
+        <p className="mt-2 text-sm text-muted-foreground">按设备总模数生成客户填写表，不会修改当前项目模数。</p>
+        <label htmlFor="template-count" className="mt-4 block text-sm">模板总模数（1～128）</label>
+        <Input id="template-count" autoFocus required type="number" min="1" max="128" step="1" placeholder="请输入模数，例如13" className="mt-2" value={templateCount} onChange={e=>setTemplateCount(e.target.value)}/>
+        <div className="mt-5 flex justify-end gap-2"><Button type="button" variant="outline" disabled={busy} onClick={()=>templateDialog.current?.close()}>取消</Button><Button type="submit" disabled={busy||!Number.isInteger(Number(templateCount))||Number(templateCount)<1||Number(templateCount)>128}>{busy?'正在生成…':'生成并下载'}</Button></div>
+      </form>
+    </dialog>
     <header className="flex flex-wrap items-center justify-between gap-3"><div><h1 className="text-xl font-semibold tracking-tight">直驱选型</h1><p className="mt-1 text-sm text-muted-foreground">一行一套工艺，逐道计算，分别取最大扭矩与最大转速。</p></div><Button variant="outline" disabled={!result.valid||busy} onClick={()=>download(false)}>导出 Excel</Button></header>
     <section className="project-toolbar rounded-xl border bg-card p-3 flex flex-wrap items-end gap-3">
       <label className="text-sm" htmlFor="project-name">项目名<Input id="project-name" className="mt-1 w-56" placeholder="例如：13模直驱改造" value={info.projectName} onChange={e=>setInfo(v=>({...v,projectName:e.target.value}))}/></label>
       <label className="text-sm" htmlFor="customer-name">客户名称<Input id="customer-name" className="mt-1 w-56" placeholder="填写客户或公司名称" value={info.customerName} onChange={e=>setInfo(v=>({...v,customerName:e.target.value}))}/></label>
-      <Button variant="outline" disabled={busy||!ready||!!result.settingsErrors.length} onClick={()=>download(true)}>下载标准输入表</Button>
+      <Button variant="outline" disabled={busy||!ready} onClick={()=>{setTemplateCount('');templateDialog.current?.showModal();}}>下载标准输入表</Button>
       <Button variant="outline" disabled={busy||!ready} onClick={()=>fileInput.current?.click()}>{busy?'正在处理…':'一键导入 Excel'}</Button>
       <input ref={fileInput} type="file" accept=".xlsx" className="hidden" aria-label="导入标准工艺输入表" onChange={e=>{const file=e.target.files?.[0];if(file)void importFile(file);}}/>
       {undo&&<Button variant="ghost" disabled={busy} onClick={()=>{setInfo(undo.info);setSettings(undo.settings);setCount(String(undo.settings.count));setProcesses(undo.processes);setUndo(null);setMessage('已恢复导入前的项目。');setImportError('');}}>撤销导入</Button>}
-      <p className="w-full text-xs text-muted-foreground">按当前总模数下载空白模板 → 客户填写项目、客户和全部工艺 → 保存为 .xlsx 后一键导入。支持继续添加工艺行；校验失败不会替换当前数据。</p>
+      <p className="w-full text-xs text-muted-foreground">下载前先选择模板模数 → 客户填写项目、客户和全部工艺 → 保存为 .xlsx 后一键导入。支持继续添加工艺行；扭矩系数仅在系统设置，导入不修改系数。校验失败不会替换当前数据。</p>
       {importError&&<p role="alert" className="w-full whitespace-pre-wrap text-sm text-destructive">{importError}</p>}
     </section>
     <section className="matrix-toolbar rounded-xl border bg-card flex flex-wrap items-end gap-3">
