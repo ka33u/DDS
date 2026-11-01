@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {calculateMatrix,matrixExcel,type MatrixProcess} from '../lib/drawing-matrix.ts';
+import {calculateMatrix,matrixExcel,roundTorque,speedInMetresPerSecond,newMatrixProcess,type MatrixProcess} from '../lib/drawing-matrix.ts';
 const fixture:MatrixProcess={id:'reference',name:'原表校核',entry:'5.5',strength:'1100',speed:'8',unit:'m/s',dies:['5.05','4.55','4.13','3.8','3.5','3.25','3.25'],drums:Array(7).fill('560')};
 const settings={count:7,first:'1.4',other:'1.3'};
 test('all seven speeds reproduce Excel N17:N23, including unchanged final die',()=>{
@@ -25,6 +25,34 @@ test('incomplete or increasing dies block combined maxima instead of disappearin
   for(const patch of [{speed:''},{dies:['6',...fixture.dies.slice(1)]},{drums:['0',...fixture.drums.slice(1)]}]){const r=calculateMatrix(settings,[fixture,{...fixture,id:'bad',...patch}]);assert.equal(r.valid,false);assert.deepEqual(r.maxima,[]);}
   assert.equal(calculateMatrix(settings,[]).valid,false);
 });
-test('export includes horizontal inputs, per-process results and independently combined maxima',()=>{
-  const xml=matrixExcel(settings,[{...fixture,name:'A&B<工艺>'}]);assert.match(xml,/A&amp;B&lt;工艺&gt;/);assert.match(xml,/综合最大值/);assert.match(xml,/第|7道转速/);assert.match(xml,/480|8/);
+test('export separates torque and speed into columns with one row per pass',()=>{
+  const xml=matrixExcel(settings,[{...fixture,name:'A&B<工艺>'}]);assert.match(xml,/A&amp;B&lt;工艺&gt;/);assert.match(xml,/取整综合最大值/);assert.match(xml,/第|7道转速/);assert.match(xml,/480|8/);
+});
+
+test('rounding always rounds upward to a multiple of five and totals each pass',()=>{
+  [0,100,101,105,105.01,106,110].forEach((v,i)=>assert.equal(roundTorque(v),[0,100,105,105,110,110,110][i]));
+  const r=calculateMatrix(settings,[fixture]);
+  assert.deepEqual(r.maxima.map(p=>p.roundedTorque),[3170,2850,2355,1895,1660,1400,0]);
+  assert.equal(r.totalRoundedTorque,13330);
+  assert.deepEqual(r.maxima.map(p=>p.roundedRpm),[115,140,170,200,240,275,275]);
+  const summary=matrixExcel(settings,[fixture]).match(/<Worksheet ss:Name="取整综合最大值">[\s\S]*?<\/Worksheet>/)?.[0]??'';
+  const rows=[...summary.matchAll(/<Row>([\s\S]*?)<\/Row>/g)].map(m=>[...m[1].matchAll(/<Data ss:Type="(?:String|Number)">([^<]*)<\/Data>/g)].map(c=>c[1]));
+  assert.deepEqual(rows[0],['道次','扭矩 N·m','转速 r/min']);
+  assert.deepEqual(rows.slice(1,8),[
+    ['第1道','3170','115'],['第2道','2850','140'],['第3道','2355','170'],
+    ['第4道','1895','200'],['第5道','1660','240'],['第6道','1400','275'],['第7道','0','275']
+  ]);
+  assert.deepEqual(rows[8],['取整扭矩总和 N·m','13330','']);
+  assert.equal(rows.length,9);
+  assert.match(summary,/>3170</);assert.match(summary,/>115</);assert.doesNotMatch(summary,/>113\./);
+  assert.equal(calculateMatrix(settings,[]).totalRoundedTorque,null);
+  assert.match(matrixExcel(settings,[fixture]),/取整扭矩总和 N·m/);
+});
+test('new and saved processes use m/s without changing their physical speed',()=>{
+  assert.equal(newMatrixProcess(7,1).unit,'m/s');
+  const converted=speedInMetresPerSecond({...fixture,unit:'m/min',speed:'480'});
+  assert.equal(converted.speed,'8');assert.equal(converted.unit,'m/s');
+  assert.deepEqual(calculateMatrix(settings,[converted]),calculateMatrix(settings,[fixture]));
+  assert.deepEqual(speedInMetresPerSecond(converted),converted);
+  assert.equal(speedInMetresPerSecond({...fixture,unit:'m/min',speed:''}).speed,'');
 });
