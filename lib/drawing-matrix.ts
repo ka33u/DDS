@@ -1,8 +1,21 @@
 export interface MatrixProcess { id:string; name:string; entry:string; strength:string; speed:string; unit:'m/min'|'m/s'; dies:string[]; drums:string[] }
 export interface MatrixSettings { count:number; first:string; other:string }
 export interface MatrixPoint { torque:number; rpm:number; force:number; speed:number; skipped:boolean }
+export function createId():string {
+  const crypto=globalThis.crypto;
+  if(typeof crypto?.randomUUID==='function')return crypto.randomUUID();
+  // LAN HTTP does not expose randomUUID, but supports cryptographic random bytes.
+  const bytes=crypto.getRandomValues(new Uint8Array(16));
+  bytes[6]=(bytes[6]&0x0f)|0x40;
+  bytes[8]=(bytes[8]&0x3f)|0x80;
+  const hex=Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');
+  return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`;
+}
+export function copyMatrixProcess(process:MatrixProcess):MatrixProcess {
+  return {...structuredClone(process),id:createId(),name:process.name+' 副本'};
+}
 export function newMatrixProcess(count:number,index:number):MatrixProcess {
-  return {id:crypto.randomUUID(),name:`工艺 ${index}`,entry:'',strength:'',speed:'',unit:'m/s',dies:Array(count).fill(''),drums:Array(count).fill('')};
+  return {id:createId(),name:`工艺 ${index}`,entry:'',strength:'',speed:'',unit:'m/s',dies:Array(count).fill(''),drums:Array(count).fill('')};
 }
 export function speedInMetresPerSecond(p:MatrixProcess):MatrixProcess {
   if(p.unit!=='m/min')return p;
