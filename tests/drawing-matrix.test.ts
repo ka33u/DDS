@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {calculateMatrix,matrixExcel,roundTorque,speedInMetresPerSecond,newMatrixProcess,type MatrixProcess} from '../lib/drawing-matrix.ts';
+import {calculateMatrix,matrixExcel,roundDemand,roundTorque,speedInMetresPerSecond,newMatrixProcess,type MatrixProcess} from '../lib/drawing-matrix.ts';
 const fixture:MatrixProcess={id:'reference',name:'原表校核',entry:'5.5',strength:'1100',speed:'8',unit:'m/s',dies:['5.05','4.55','4.13','3.8','3.5','3.25','3.25'],drums:Array(7).fill('560')};
 const settings={count:7,first:'1.4',other:'1.3'};
 test('all seven speeds reproduce Excel N17:N23, including unchanged final die',()=>{
@@ -74,4 +74,22 @@ test('new and saved processes use m/s without changing their physical speed',()=
   assert.deepEqual(calculateMatrix(settings,[converted]),calculateMatrix(settings,[fixture]));
   assert.deepEqual(speedInMetresPerSecond(converted),converted);
   assert.equal(speedInMetresPerSecond({...fixture,unit:'m/min',speed:''}).speed,'');
+});
+test('all rounding modes apply to unrounded maxima, with the total summed after rounding each pass',()=>{
+  const original=calculateMatrix(settings,[fixture]);
+  assert.deepEqual(original,calculateMatrix({...settings,rounding:'five'},[fixture]));
+  for(const [mode,torques,rpms] of [
+    ['nearest',[3168,2848,2352,1892,1659,1395,0],[113,139,169,200,235,273,273]],
+    ['up',[3169,2849,2352,1892,1660,1396,0],[114,140,169,200,236,273,273]],
+  ] as const){
+    const r=calculateMatrix({...settings,rounding:mode},[fixture]);
+    assert.deepEqual(r.rows,original.rows);
+    assert.deepEqual(r.maxima.map(x=>x.roundedTorque),torques);
+    assert.deepEqual(r.maxima.map(x=>x.roundedRpm),rpms);
+    assert.equal(r.totalRoundedTorque,torques.reduce<number>((sum,t)=>sum+t,0));
+  }
+  const inputs=[0,100,101.2,101.5,105];
+  assert.deepEqual(inputs.map(v=>roundDemand(v,'five')),[0,100,105,105,105]);
+  assert.deepEqual(inputs.map(v=>roundDemand(v,'nearest')),[0,100,101,102,105]);
+  assert.deepEqual(inputs.map(v=>roundDemand(v,'up')),[0,100,102,102,105]);
 });

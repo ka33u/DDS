@@ -3,7 +3,7 @@ import {useEffect,useMemo,useState,useRef} from 'react';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Table,TableHeader,TableBody,TableRow,TableHead,TableCell} from '@/components/ui/table';
-import {calculateMatrix,newMatrixProcess,copyMatrixProcess,speedInMetresPerSecond,type MatrixProcess,type MatrixSettings} from '@/lib/drawing-matrix';
+import {calculateMatrix,newMatrixProcess,copyMatrixProcess,roundingOption,roundingOptions,speedInMetresPerSecond,type MatrixProcess,type MatrixSettings} from '@/lib/drawing-matrix';
 import {MotorSelection} from '@/components/motor-selection';
 import {workbookFilename} from '@/lib/export-filename';
 import type {MotorChoice} from '@/lib/motor-spec';
@@ -88,7 +88,17 @@ export default function Home(){
     {!processes.length&&<TableRow><TableCell colSpan={settings.count+5} className="h-28 text-center text-muted-foreground">先确认总模数和系数，再添加拉拔工艺。</TableCell></TableRow>}
     {processes.map(p=><TableRow key={p.id}><TableCell className="sticky left-0 z-10 bg-card"><Input aria-label="工艺名称" value={p.name} onChange={e=>update(p.id,{name:e.target.value})}/></TableCell><TableCell>{numeric(p,'entry')}</TableCell><TableCell>{numeric(p,'strength')}</TableCell><TableCell><div className="matrix-speed">{numeric(p,'speed')}</div></TableCell>{cols.map(i=><TableCell key={i} className="border-l"><div className="matrix-pair">{(['dies','drums'] as const).map(k=><Input key={k} className="pass-input" aria-label={p.name+' 第'+(i+1)+'道'+(k==='dies'?'模具':'滚筒')} type="number" min="0" step="any" value={p[k][i]??''} onChange={e=>update(p.id,{[k]:Array.from({length:Math.max(settings.count,p[k].length)},(_,j)=>j===i?e.target.value:p[k][j]??'')})}/>)}</div><span className="skip-slot">{p.dies[i]&&Number(p.dies[i])===Number(i?p.dies[i-1]:p.entry)&&<span className="skip-label">跳模</span>}</span></TableCell>)}<TableCell><div className="matrix-actions"><Button size="sm" variant="ghost" onClick={()=>update(p.id,{drums:p.drums.map((d,i)=>i<settings.count?p.drums[0]:d)})}>滚筒同首道</Button><Button size="sm" variant="ghost" onClick={()=>setProcesses(old=>[...old,copyMatrixProcess(p)])}>复制</Button><Button size="sm" variant="ghost" onClick={()=>setProcesses(old=>old.filter(x=>x.id!==p.id))}>删除</Button></div></TableCell></TableRow>)}
     </TableBody></Table></div></section>
-    <section className="matrix-section space-y-2"><h2 className="font-semibold text-lg">计算结果</h2><p className="text-sm text-muted-foreground">每道上行为扭矩（N·m），下行为转速（r/min）；综合行直接显示取整后的最大值：扭矩和转速均向上取到5的倍数（尾数为0或5）；悬停来源可查看完整工艺名称。</p>
+    <section className="matrix-section space-y-2">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <h2 className="font-semibold text-lg">计算结果</h2>
+      <label className="flex items-center gap-2 text-sm">取整方式
+        <select className="h-8 rounded-md border bg-card px-2" value={result.rounding.id}
+          onChange={e=>{const rounding=roundingOption(e.target.value).id;setSettings(s=>({...s,rounding}));}}>
+          {roundingOptions.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
+        </select>
+      </label>
+    </div>
+    <p className="text-sm text-muted-foreground">各道上行为扭矩（N·m），下行为转速（r/min）。综合行对两者的最大值分别取整。{result.rounding.description}</p>
     {!!result.settingsErrors.length&&<p role="alert" className="text-destructive text-sm">{result.settingsErrors.join('；')}</p>}
     <div className="rounded-xl border bg-card overflow-hidden"><Table className="matrix-result-table" style={{minWidth:104+settings.count*72}}><colgroup><col style={{width:104}}/>{cols.map(i=><col key={i}/>)}</colgroup><TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-card ">工艺</TableHead>{cols.map(i=><TableHead key={i} className="border-l  text-center"><span className="pass-number">{String(i+1).padStart(2,'0')}</span><span className="pass-label">扭矩 N·m</span><span className="pass-label">转速 r/min</span></TableHead>)}</TableRow></TableHeader><TableBody>
     {result.rows.map(r=><TableRow key={r.id}><TableCell className="sticky left-0 z-10 bg-card font-medium">{r.name}</TableCell>{r.errors.length||!r.points.length?<TableCell colSpan={settings.count} className="text-destructive whitespace-normal">{r.errors.length?<details className="matrix-errors"><summary>待完善 {r.errors.length} 项 · {r.errors[0]}</summary><p>{r.errors.join('；')}</p></details>:'请检查统一系数'}</TableCell>:r.points.map((p,i)=><TableCell key={i} className="border-l text-center tabular-nums"><span className="matrix-torque result-torque">{fmt(p.torque)}{p.skipped&&<small className="skip-label result-skip" title="跳模：理论拉拔扭矩为0">跳模</small>}</span><span className="matrix-rpm">{fmt(p.rpm)}</span></TableCell>)}</TableRow>)}

@@ -28,7 +28,7 @@ export function addDrawingProcessSheet(wb:ExcelJS.Workbook, data:ProjectData, re
   const passes=Array.from({length:data.settings.count},(_,i)=>i);
   const title=[data.info.projectName,data.info.customerName,sheetName].filter(Boolean).join(' · ');
   sheet.mergeCells('A1:F1');sheet.getCell('A1').value=title;sectionHeading(sheet.getRow(1));
-  sheet.addRow(['总模数',passes.length,'首道扭矩系数',Number(data.settings.first),'其他道扭矩系数',Number(data.settings.other)]);
+  sheet.addRow(['总模数',passes.length,'首道扭矩系数',Number(data.settings.first),'其他道扭矩系数',Number(data.settings.other),'取整方式',result.rounding.label]);
   sheet.addRow(['工艺输入（每行一套）','以下为导出时的工艺输入及计算结果']);
   sectionHeading(sheet.addRow(['工艺名称','进线规格 mm','进线抗拉强度 MPa','下线速度 m/s',
     ...passes.flatMap(i=>[`第${i+1}道模具 mm`,`第${i+1}道滚筒 mm`])]));
