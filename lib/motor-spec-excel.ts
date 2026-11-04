@@ -22,8 +22,8 @@ function formula(expression:string, result?:number|string|null):ExcelJS.CellForm
 // the printable A:U specification. All formulas work offline on this sheet.
 function addSupportColumns(sheet:ExcelJS.Worksheet, count:number, info:ProjectInfo) {
   const set=(address:string,value:ExcelJS.CellValue)=>{sheet.getCell(address).value=value;};
-  set('AY1','项目名'); set('AZ1',info.projectName.trim());
-  set('AY2','客户名称'); set('AZ2',info.customerName.trim());
+  set('AY1','项目名'); set('AZ1',info.projectName.trim() || null);
+  set('AY2','客户名称'); set('AZ2',info.customerName.trim() || null);
   set('AY3','电压系数'); set('AZ3',defaults.voltageFactor);
   set('AY4','效率表'); set('AZ4','旧效率查询工具一级能效参考表；1.1 kW / 45 r/min 沿用59.9%。低于45 r/min为外推。');
   set('AI1','kW / r/min');
