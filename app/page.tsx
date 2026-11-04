@@ -5,6 +5,7 @@ import {Input} from '@/components/ui/input';
 import {Table,TableHeader,TableBody,TableRow,TableHead,TableCell} from '@/components/ui/table';
 import {calculateMatrix,newMatrixProcess,copyMatrixProcess,speedInMetresPerSecond,type MatrixProcess,type MatrixSettings} from '@/lib/drawing-matrix';
 import {MotorSelection} from '@/components/motor-selection';
+import {workbookFilename} from '@/lib/export-filename';
 import type {MotorChoice} from '@/lib/motor-spec';
 import type {ProjectInfo,ProjectData} from '@/lib/project-excel';
 const key='dds-horizontal-matrix:v1';
@@ -38,8 +39,8 @@ export default function Home(){
       const buffer=await makeProjectExcel({info,settings:template?{...settings,count:selectedCount}:settings,processes},template);
       const url=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
       const a=document.createElement('a');a.href=url;
-      const name=[info.projectName,info.customerName,template?'标准工艺输入模板':'直驱选型参数表'].filter(Boolean).join('_').replace(/[\\/:*?"<>|]/g,'_');
-      a.download=name+(template?'_'+selectedCount+'模':'')+'.xlsx';a.click();if(template)templateDialog.current?.close();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      a.download=workbookFilename(info,template?selectedCount:settings.count,template?'标准工艺输入模板':'直驱选型参数表');
+      a.click();if(template)templateDialog.current?.close();setTimeout(()=>URL.revokeObjectURL(url),1000);
     }catch(e){setImportError(e instanceof Error?e.message:'表格生成失败，请重试。');}finally{setBusy(false);}
   };
   const importFile=async(file:File)=>{

@@ -9,7 +9,9 @@ test('result workbook contains customer and project, integer results and reimpor
  assert.equal(sheet.getCell('B2').value,data.info.projectName);assert.equal(sheet.getCell('B3').value,data.info.customerName);
  assert.deepEqual([1,2,3].map(c=>sheet.getCell(4,c).value),['道次','扭矩 N·m','转速 r/min']);
  assert.equal(Number(sheet.getCell('B5').result)%5,0);assert.equal(sheet.getCell('B6').result,0);assert.equal(Number(sheet.getCell('C6').result)%5,0);
- assert.equal(wb.getWorksheet('拉拔工艺')!.getCell('B5').formula,"'工艺输入'!B2");
+ const drawing=wb.getWorksheet('拉拔工艺')!;
+ assert.equal(drawing.getCell('B5').value,5.5);
+ drawing.eachRow(r=>r.eachCell(c=>assert.equal(c.formula,undefined)));
  const restored=await readProjectExcel(buffer);assert.deepEqual(restored.info,data.info);assert.deepEqual(restored.settings,data.settings);
  assert.deepEqual({...restored.processes[0],id:'a'},data.processes[0]);
 });

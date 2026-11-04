@@ -3,6 +3,7 @@ import {useState} from 'react';
 import {Button} from '@/components/ui/button';
 import {defaults, heightOptions, poleOptions, motorSpec, newChoice, validChoice, validHeight, validPoles, type MotorChoice, type DriveDemand} from '@/lib/motor-spec';
 import type {ProjectData} from '@/lib/project-excel';
+import {workbookFilename} from '@/lib/export-filename';
 
 interface Props {
   project:ProjectData;
@@ -32,8 +33,8 @@ export function MotorSelection({project,demands,choices,onChange}:Props){
       const buffer=await motorSpecWorkbook(project,choices);
       const url=URL.createObjectURL(new Blob([buffer],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
       const link=document.createElement('a');link.href=url;
-      const prefix=[info.projectName,info.customerName].filter(Boolean).join('_').replace(/[\\/:*?"<>|]/g,'_');
-      link.download=(prefix?prefix+'_':'')+demands.length+'模永磁电机选型参数.xlsx';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      link.download=workbookFilename(info,project.settings.count,'永磁电机选型参数');
+      link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
     }catch(e){setError(e instanceof Error?e.message:'规格表生成失败');}finally{setSaving(false);}
   };
   return <section className="matrix-section space-y-2">
@@ -59,7 +60,7 @@ export function MotorSelection({project,demands,choices,onChange}:Props){
       </table></div>}
     <datalist id="motor-heights">{heightOptions.map(n=><option key={n} value={n}/>)}</datalist>
     <datalist id="motor-poles">{poleOptions.map(n=><option key={n} value={n}/>)}</datalist>
-    <p className="text-muted-foreground">{defaults.series} · {defaults.voltage} VAC · cosφ {defaults.powerFactor} · IP55 / F / S1 / Y · 水冷。效率按整数功率（kW）和额定转速插值。导出后可在「拉拔工艺」修改工艺输入，或在「电机选型」调整中心高、极数。</p>
+    <p className="text-muted-foreground">{defaults.series} · {defaults.voltage} VAC · cosφ {defaults.powerFactor} · IP55 / F / S1 / Y · 水冷。效率按整数功率（kW）和额定转速插值。「拉拔工艺」记录导出时的输入和结果。调整工艺后请在系统内重新导出。</p>
     {error&&<p role="alert" className="text-destructive">{error}</p>}
   </section>;
 }

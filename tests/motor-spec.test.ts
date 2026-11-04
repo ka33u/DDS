@@ -51,6 +51,7 @@ test('spec workbook keeps 21 ordered fields, references and cached results for a
   assert.equal(spec.getColumn('AZ').hidden,true);
   assert.equal(spec.getCell('C3').value,368);assert.equal(spec.getCell('M3').value,32);
   const drawing=wb.getWorksheet('拉拔工艺')!;
+  drawing.eachRow(r=>r.eachCell(c=>assert.equal(c.formula,undefined)));
   assert.equal(drawing.getCell('A5').value,'头道跳模');assert.equal(drawing.getCell('D5').value,8);
   assert.equal(drawing.getCell('A6').value,'高速');assert.equal(drawing.getCell('D6').value,11);
   for(const [i,p] of result.maxima.entries()){
@@ -58,7 +59,7 @@ test('spec workbook keeps 21 ordered fields, references and cached results for a
       const c=spec.getCell(col+(i+3));
       assert.equal(c.result,expected);
       assert.match(c.formula!,/^'拉拔工艺'!/);
-      assert.equal(drawing.getCell(c.formula!.split('!')[1]).result,expected);
+      assert.equal(drawing.getCell(c.formula!.split('!')[1]).value,expected);
     }
   }
   assert.equal(spec.getCell('E3').formula,'F3*G3/9550');
