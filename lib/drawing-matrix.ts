@@ -8,7 +8,13 @@ export type RoundingMode = (typeof roundingOptions)[number]['id'];
 export function roundingOption(value:unknown) {
   return roundingOptions.find(option=>option.id===value) ?? roundingOptions[0];
 }
-export interface MatrixSettings { count:number; first:string; other:string; rounding?:RoundingMode }
+export interface MatrixSettings {
+  count:number; first:string; other:string;
+  torqueRounding?:RoundingMode;
+  rpmRounding?:RoundingMode;
+  /** Shared preference in previously saved projects. */
+  rounding?:RoundingMode;
+}
 export interface MatrixPoint { torque:number; rpm:number; force:number; speed:number; skipped:boolean }
 export function createId():string {
   const crypto=globalThis.crypto;
@@ -68,12 +74,13 @@ export function calculateMatrix(settings:MatrixSettings, processes:MatrixProcess
     return {id:p.id,name:p.name,errors,points};
   });
   const valid=processes.length>0&&!settingsErrors.length&&rows.every(r=>!r.errors.length);
-  const rounding=roundingOption(settings.rounding);
+  const torqueRounding=roundingOption(settings.torqueRounding ?? settings.rounding);
+  const rpmRounding=roundingOption(settings.rpmRounding ?? settings.rounding);
   const maxima=valid?Array.from({length:settings.count},(_,i)=>{
     const t=rows.reduce((a,b)=>a.points[i].torque>=b.points[i].torque?a:b),n=rows.reduce((a,b)=>a.points[i].rpm>=b.points[i].rpm?a:b);
-    return {torque:t.points[i].torque,roundedTorque:roundDemand(t.points[i].torque,rounding.id),rpm:n.points[i].rpm,roundedRpm:roundDemand(n.points[i].rpm,rounding.id),torqueSource:t.name,speedSource:n.name};
+    return {torque:t.points[i].torque,roundedTorque:roundDemand(t.points[i].torque,torqueRounding.id),rpm:n.points[i].rpm,roundedRpm:roundDemand(n.points[i].rpm,rpmRounding.id),torqueSource:t.name,speedSource:n.name};
   }):[];
-  return {rows,maxima,rounding,settingsErrors,valid,totalTorque:valid?maxima.reduce((sum,p)=>sum+p.torque,0):null,totalRoundedTorque:valid?maxima.reduce((sum,p)=>sum+p.roundedTorque,0):null};
+  return {rows,maxima,torqueRounding,rpmRounding,settingsErrors,valid,totalTorque:valid?maxima.reduce((sum,p)=>sum+p.torque,0):null,totalRoundedTorque:valid?maxima.reduce((sum,p)=>sum+p.roundedTorque,0):null};
 }
 export function matrixExcel(settings:MatrixSettings,processes:MatrixProcess[]) {
   const result=calculateMatrix(settings,processes);
@@ -81,5 +88,5 @@ export function matrixExcel(settings:MatrixSettings,processes:MatrixProcess[]) {
   const escape=(x:unknown)=>String(x??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;');
   const sheet=(name:string,rows:(string|number)[][])=>`<Worksheet ss:Name="${name}"><Table>${rows.map((r,i)=>`<Row>${r.map(v=>`<Cell${i===0?' ss:StyleID="Header"':''}><Data ss:Type="${typeof v==='number'?'Number':'String'}">${escape(v)}</Data></Cell>`).join('')}</Row>`).join('')}</Table></Worksheet>`;
   const cols=Array.from({length:settings.count},(_,i)=>i+1);
-  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#DCEEEE" ss:Pattern="Solid"/></Style></Styles>${sheet('取整综合最大值',[['道次','扭矩 N·m','转速 r/min'],...result.maxima.map((p,i)=>[`第${i+1}道`,p.roundedTorque,p.roundedRpm]),['取整扭矩总和 N·m',result.totalRoundedTorque!,'']])}${sheet('工艺输入',[['工艺','进线 mm','进线抗拉强度 MPa','下线速度','单位',...cols.flatMap(i=>[`${i}道模具 mm`,`${i}道滚筒 mm`])],...processes.map(speedInMetresPerSecond).map(p=>[p.name,Number(p.entry),Number(p.strength),Number(p.speed),p.unit,...cols.flatMap((_,i)=>[Number(p.dies[i]),Number(p.drums[i])])]),['首道系数',Number(settings.first),'其他道系数',Number(settings.other)],['取整规则',result.rounding.label+'。'+result.rounding.description+' 总和为各道取整扭矩之和。'],['说明','相同模具尺寸为跳模，理论拉拔扭矩为0，转速仍按线速计算。未含摩擦、加速、调模负载。'],['转速公式','v_i=下线速度(m/min)×(末道丝径/本道丝径)^2；n_i=1000×v_i/(π×滚筒直径mm)'],['拉力公式','F=0.6×进道丝径²×平均抗拉强度×sqrt(压缩率)；强度=进线强度×sqrt(进线丝径/本道丝径)；T=F×滚筒直径/2000×系数']])}</Workbook>`;
+  return `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Styles><Style ss:ID="Header"><Font ss:Bold="1"/><Interior ss:Color="#DCEEEE" ss:Pattern="Solid"/></Style></Styles>${sheet('取整综合最大值',[['道次','扭矩 N·m','转速 r/min'],...result.maxima.map((p,i)=>[`第${i+1}道`,p.roundedTorque,p.roundedRpm]),['取整扭矩总和 N·m',result.totalRoundedTorque!,'']])}${sheet('工艺输入',[['工艺','进线 mm','进线抗拉强度 MPa','下线速度','单位',...cols.flatMap(i=>[`${i}道模具 mm`,`${i}道滚筒 mm`])],...processes.map(speedInMetresPerSecond).map(p=>[p.name,Number(p.entry),Number(p.strength),Number(p.speed),p.unit,...cols.flatMap((_,i)=>[Number(p.dies[i]),Number(p.drums[i])])]),['首道系数',Number(settings.first),'其他道系数',Number(settings.other)],['扭矩取整',result.torqueRounding.label,'转速取整',result.rpmRounding.label],['说明','相同模具尺寸为跳模，理论拉拔扭矩为0，转速仍按线速计算。未含摩擦、加速、调模负载。'],['转速公式','v_i=下线速度(m/min)×(末道丝径/本道丝径)^2；n_i=1000×v_i/(π×滚筒直径mm)'],['拉力公式','F=0.6×进道丝径²×平均抗拉强度×sqrt(压缩率)；强度=进线强度×sqrt(进线丝径/本道丝径)；T=F×滚筒直径/2000×系数']])}</Workbook>`;
 }

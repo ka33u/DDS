@@ -67,6 +67,17 @@ test('rounding always rounds upward to a multiple of five and totals each pass',
   assert.equal(calculateMatrix(settings,[]).totalRoundedTorque,null);
   assert.match(matrixExcel(settings,[fixture]),/取整扭矩总和 N·m/);
 });
+test('changing either selector in a legacy project preserves the other preference',()=>{
+  const legacy={...settings,rounding:'up' as const};
+  const original=calculateMatrix(legacy,[fixture]);
+  assert.equal(original.torqueRounding.id,'up');assert.equal(original.rpmRounding.id,'up');
+  const torqueOnly=calculateMatrix({...legacy,torqueRounding:'nearest'},[fixture]);
+  assert.equal(torqueOnly.rpmRounding.id,'up');assert.equal(torqueOnly.maxima[0].roundedRpm,114);
+  assert.equal(torqueOnly.maxima[0].roundedTorque,3168);
+  const speedOnly=calculateMatrix({...legacy,rpmRounding:'nearest'},[fixture]);
+  assert.equal(speedOnly.maxima[0].roundedRpm,113);
+  assert.equal(speedOnly.totalRoundedTorque,original.totalRoundedTorque);
+});
 test('new and saved processes use m/s without changing their physical speed',()=>{
   assert.equal(newMatrixProcess(7,1).unit,'m/s');
   const converted=speedInMetresPerSecond({...fixture,unit:'m/min',speed:'480'});

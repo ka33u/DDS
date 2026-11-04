@@ -84,19 +84,20 @@ test('offered frame sizes and pole counts support the new choices and exclude re
   }
   assert.ok(validChoice({height:'375',poles:'18'}));
 });
-test('motor specification and drawing sheet use the selected result rounding mode',async()=>{
-  const process={id:'p',name:'工艺',entry:'5.5',strength:'1100',speed:'8',unit:'m/s' as const,dies:['5.05'],drums:['560']};
-  for(const [rounding,torque,rpm,label] of [
-    ['five',3170,275,'逢5或10取整'],['nearest',3168,273,'四舍五入取整'],['up',3169,273,'向上取整'],
-  ] as const){
-    const project={info:{projectName:'测试',customerName:'客户'},settings:{count:1,first:'1.4',other:'1.3',rounding},processes:[process]};
+test('motor specification and drawing sheet use each metric’s own rounding rule',async()=>{
+  const process={id:'p',name:'工艺',entry:'5.5',strength:'1100',speed:'3',unit:'m/s' as const,dies:['5.05'],drums:['560']};
+  const cases=[['five',3170,105,'逢5或10取整'],['nearest',3168,102,'四舍五入取整'],['up',3169,103,'向上取整']] as const;
+  for(const [torqueRounding,torque,,torqueLabel] of cases) for(const [rpmRounding,,rpm,rpmLabel] of cases){
+    const project={info:{projectName:'测试',customerName:'客户'},settings:{count:1,first:'1.4',other:'1.3',torqueRounding,rpmRounding},processes:[process]};
     const wb=new ExcelJS.Workbook();
     await wb.xlsx.load(await motorSpecWorkbook(project,[{height:'290',poles:'32'}]));
     const spec=wb.getWorksheet('电机选型')!,drawing=wb.getWorksheet('拉拔工艺')!;
-    assert.equal(drawing.getCell('H2').value,label);
+    assert.equal(drawing.getCell('H2').value,torqueLabel);
+    assert.equal(drawing.getCell('J2').value,rpmLabel);
     assert.equal(spec.getCell('G3').result,torque);
     assert.equal(spec.getCell('F3').result,rpm);
     assert.equal(drawing.getCell(spec.getCell('G3').formula!.split('!')[1]).value,torque);
+    assert.equal(drawing.getCell('B'+drawing.rowCount).value,torque);
     assert.equal(spec.getCell('E3').result,torque*rpm/9550);
   }
 });

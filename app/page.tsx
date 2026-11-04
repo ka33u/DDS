@@ -91,14 +91,22 @@ export default function Home(){
     <section className="matrix-section space-y-2">
     <div className="flex flex-wrap items-center justify-between gap-2">
       <h2 className="font-semibold text-lg">计算结果</h2>
-      <label className="flex items-center gap-2 text-sm">取整方式
-        <select className="h-8 rounded-md border bg-card px-2" value={result.rounding.id}
-          onChange={e=>{const rounding=roundingOption(e.target.value).id;setSettings(s=>({...s,rounding}));}}>
-          {roundingOptions.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
-        </select>
-      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        {(['torqueRounding','rpmRounding'] as const).map(key=>(
+          <label key={key} className="flex items-center gap-2 text-sm">
+            {key==='torqueRounding'?'扭矩取整':'转速取整'}
+            <select className="h-8 rounded-md border bg-card px-2" value={result[key].id} title={result[key].description}
+              onChange={e=>{
+                const mode=roundingOption(e.target.value).id;
+                setSettings(current=>({...current,[key]:mode}));
+              }}>
+              {roundingOptions.map(option=><option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
+        ))}
+      </div>
     </div>
-    <p className="text-sm text-muted-foreground">各道上行为扭矩（N·m），下行为转速（r/min）。综合行对两者的最大值分别取整。{result.rounding.description}</p>
+    <p className="text-sm text-muted-foreground">各道上行为扭矩（N·m），下行为转速（r/min）。综合行按各自选择的方式对最大值取整。</p>
     {!!result.settingsErrors.length&&<p role="alert" className="text-destructive text-sm">{result.settingsErrors.join('；')}</p>}
     <div className="rounded-xl border bg-card overflow-hidden"><Table className="matrix-result-table" style={{minWidth:104+settings.count*72}}><colgroup><col style={{width:104}}/>{cols.map(i=><col key={i}/>)}</colgroup><TableHeader><TableRow><TableHead className="sticky left-0 z-10 bg-card ">工艺</TableHead>{cols.map(i=><TableHead key={i} className="border-l  text-center"><span className="pass-number">{String(i+1).padStart(2,'0')}</span><span className="pass-label">扭矩 N·m</span><span className="pass-label">转速 r/min</span></TableHead>)}</TableRow></TableHeader><TableBody>
     {result.rows.map(r=><TableRow key={r.id}><TableCell className="sticky left-0 z-10 bg-card font-medium">{r.name}</TableCell>{r.errors.length||!r.points.length?<TableCell colSpan={settings.count} className="text-destructive whitespace-normal">{r.errors.length?<details className="matrix-errors"><summary>待完善 {r.errors.length} 项 · {r.errors[0]}</summary><p>{r.errors.join('；')}</p></details>:'请检查统一系数'}</TableCell>:r.points.map((p,i)=><TableCell key={i} className="border-l text-center tabular-nums"><span className="matrix-torque result-torque">{fmt(p.torque)}{p.skipped&&<small className="skip-label result-skip" title="跳模：理论拉拔扭矩为0">跳模</small>}</span><span className="matrix-rpm">{fmt(p.rpm)}</span></TableCell>)}</TableRow>)}
