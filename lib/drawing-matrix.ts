@@ -39,13 +39,15 @@ export function calculateMatrix(settings:MatrixSettings, processes:MatrixProcess
     const points:MatrixPoint[]=[];
     if(!errors.length&&!settingsErrors.length){
       const entry=Number(p.entry),sigma=Number(p.strength),end=Number(p.dies[settings.count-1]),endSpeed=Number(p.speed)*(p.unit==='m/s'?60:1);
+      let torqueFactor = Number(settings.first);
       for(let i=0;i<settings.count;i++){
         const before=Number(i?p.dies[i-1]:p.entry),d=Number(p.dies[i]),D=Number(p.drums[i]);
         const skipped=d===before,compression=1-(d/before)**2;
         const avg=(sigma*Math.sqrt(entry/before)+sigma*Math.sqrt(entry/d))/2;
         const force=skipped?0:.6*before**2*avg*Math.sqrt(compression);
         const speed=endSpeed*(end/d)**2;
-        points.push({force,speed,skipped,torque:force*D/2000*Number(i===0?settings.first:settings.other),rpm:speed*1000/(Math.PI*D)});
+        points.push({force,speed,skipped,torque:force*D/2000*torqueFactor,rpm:speed*1000/(Math.PI*D)});
+        if (!skipped) torqueFactor = Number(settings.other);
       }
       if(points.some(x=>![x.force,x.torque,x.speed,x.rpm].every(Number.isFinite))){errors.push('输入量级超出计算范围');points.length=0;}
     }

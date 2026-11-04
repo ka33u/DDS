@@ -21,6 +21,25 @@ test('first and middle skipped passes give zero drawing torque but appropriate s
   const p={...fixture,dies:['5.5','4.55','4.55','3.8','3.5','3.25','3.25'],drums:['400','560','800','560','560','560','560']};
   const r=calculateMatrix(settings,[p]);assert.equal(r.valid,true);assert.equal(r.rows[0].points[0].torque,0);assert.equal(r.rows[0].points[2].torque,0);assert.ok(r.rows[0].points[0].rpm>0);assert.ok(Math.abs(r.rows[0].points[2].rpm/r.rows[0].points[1].rpm-560/800)<1e-12);
 });
+test('each process uses the first factor only on its first actual reduction',()=>{
+  const processes=[
+    {...fixture,name:'第二模开拔',dies:['5.5','5','5','4.5']},
+    {...fixture,name:'第三模开拔',dies:['5.5','5.5','5','4.5']},
+    {...fixture,name:'全部跳模',dies:['5.5','5.5','5.5','5.5']},
+  ];
+  const result=calculateMatrix({count:4,first:'1.6',other:'1.2'},processes);
+  assert.ok(result.valid);
+  const factors=[[0,1.6,0,1.2],[0,0,1.6,1.2],[0,0,0,0]];
+  for(const [r,row] of result.rows.entries()){
+    for(const [i,point] of row.points.entries()){
+      assert.equal(point.torque,point.force*560/2000*factors[r][i]);
+      assert.equal(point.skipped,factors[r][i]===0);
+      assert.ok(point.rpm>0);
+    }
+  }
+  assert.equal(result.maxima[2].torqueSource,'第三模开拔');
+  assert.equal(result.maxima[2].roundedTorque,roundTorque(result.rows[1].points[2].torque));
+});
 test('incomplete or increasing dies block combined maxima instead of disappearing',()=>{
   for(const patch of [{speed:''},{dies:['6',...fixture.dies.slice(1)]},{drums:['0',...fixture.drums.slice(1)]}]){const r=calculateMatrix(settings,[fixture,{...fixture,id:'bad',...patch}]);assert.equal(r.valid,false);assert.deepEqual(r.maxima,[]);}
   assert.equal(calculateMatrix(settings,[]).valid,false);
