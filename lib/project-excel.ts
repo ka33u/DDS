@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import {addDrawingProcessSheet} from './drawing-process-sheet.ts';
 import {calculateMatrix,newMatrixProcess,speedInMetresPerSecond,type MatrixSettings,type MatrixProcess} from './drawing-matrix.ts';
 
 export interface ProjectInfo { projectName:string; customerName:string }
@@ -36,11 +37,13 @@ export async function makeProjectExcel(data:ProjectData,template=false):Promise<
   const wb=new ExcelJS.Workbook();wb.creator='直驱选型';
   if(!template){
     const result=calculateMatrix(data.settings,data.processes);if(!result.valid)throw new Error('请先补齐全部工艺参数再导出。');
-    const sheet=wb.addWorksheet('取整综合最大值');sheet.addRows([['直驱选型 · 选型参数表'],['项目名',data.info.projectName],['客户名称',data.info.customerName],['道次','扭矩 N·m','转速 r/min'],...result.maxima.map((p,i)=>[`第${i+1}道`,p.roundedTorque,p.roundedRpm]),['取整扭矩总和 N·m',result.totalRoundedTorque]]);
+    const sheet=wb.addWorksheet('取整综合最大值');
+    addInputs(wb,data,false);
+    const refs=addDrawingProcessSheet(wb,data,result,wb.getWorksheet('工艺输入')!);
+    sheet.addRows([['直驱选型 · 选型参数表'],['项目名',data.info.projectName],['客户名称',data.info.customerName],['道次','扭矩 N·m','转速 r/min'],...result.maxima.map((p,i)=>[`第${i+1}道`,{formula:refs[i].torque,result:p.roundedTorque},{formula:refs[i].rpm,result:p.roundedRpm}]),['取整扭矩总和 N·m',{formula:`SUM(B5:B${4+data.settings.count})`,result:result.totalRoundedTorque!}]]);
     sheet.mergeCells('A1:C1');sheet.mergeCells('B2:C2');sheet.mergeCells('B3:C3');
     styleSheet(sheet,4);sheet.getRow(1).height=34;sheet.getRow(1).font={name:'等线',size:16,bold:true,color:{argb:'FF0F5F68'}};sheet.getColumn(2).width=28;sheet.getColumn(3).width=22;
-  }
-  addInputs(wb,data,template);
+  } else addInputs(wb,data,true);
   return await wb.xlsx.writeBuffer() as unknown as ArrayBuffer;
 }
 export async function readProjectExcel(buffer:ArrayBuffer,coefficients:Pick<MatrixSettings,'first'|'other'>={first:'1.4',other:'1.3'}):Promise<ProjectData>{

@@ -7,12 +7,17 @@ export const defaults = {
   protection: 'IP55', insulation: 'F', duty: 'S1', connection: 'Y',
   cooling: '水冷', waterPressure: '0.1~0.2', waterTemp: '≤35', waterQuality: '防冻去离子水（水+乙二醇）',
 };
-export const heightOptions = [80,90,100,112,132,160,180,200,225,250,280,315,355,400,450,500,560,630];
-export const poleOptions = [4,6,8,10,12,14,16,20,24,28,32,36,40,48,56,64,72,80,96,120];
+export const heightOptions = [160,180,200,225,250,280,290,315,355,368,400,445,450,500,520,560,590,630,710];
+export const poleOptions = [8,10,12,14,16,20,24,28,32,36,40,48,56,64,72,80,96];
 export const newChoice = ():MotorChoice => ({height:'', poles:''});
+export function validHeight(height:number) {
+  return Number.isSafeInteger(height) && height>0 && (height<80 || height>132);
+}
+export function validPoles(poles:number) {
+  return Number.isSafeInteger(poles) && poles>=2 && poles%2===0 && ![4,6,120].includes(poles);
+}
 export function validChoice(choice:MotorChoice) {
-  const height=Number(choice.height), poles=Number(choice.poles);
-  return Number.isSafeInteger(height) && height>0 && Number.isSafeInteger(poles) && poles>=2 && poles%2===0;
+  return validHeight(Number(choice.height)) && validPoles(Number(choice.poles));
 }
 
 interface Interval { low:number; high:number; weight:number }
@@ -47,7 +52,7 @@ export function motorSpec(demand:DriveDemand, choice:MotorChoice) {
   const ratedPowerKW = Math.round(power);
   const efficiency=efficiencyAt(rpm,ratedPowerKW);
   const poles=Number(choice.poles);
-  const frequency=Number.isSafeInteger(poles)&&poles>=2&&poles%2===0 ? rpm*poles/120 : null;
+  const frequency=validPoles(poles) ? rpm*poles/120 : null;
   const current=efficiency.value===null ? null :
     power*1000/1.732/(defaults.voltage*defaults.voltageFactor)/efficiency.value/defaults.powerFactor;
   const model=validChoice(choice) ? `${defaults.series}${Number(choice.height)}P${poles}-${torque}-${rpm}-${ratedPowerKW}` : '';

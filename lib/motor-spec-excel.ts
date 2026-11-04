@@ -1,7 +1,9 @@
 import ExcelJS from 'exceljs';
-import {defaults, motorSpec, validChoice, type DriveDemand, type MotorChoice} from './motor-spec.ts';
+import {defaults, motorSpec, validChoice, type MotorChoice} from './motor-spec.ts';
+import {calculateMatrix} from './drawing-matrix.ts';
+import {addDrawingProcessSheet} from './drawing-process-sheet.ts';
 import {percentGrid, powers, speeds} from './efficiency-table.ts';
-import type {ProjectInfo} from './project-excel.ts';
+import type {ProjectInfo, ProjectData} from './project-excel.ts';
 
 const titles=['道次','系列','中心高','电机型号','额定功率\n(kW)','额定转速\n(r/min)','额定转矩\n(Nm)','额定电压\n(VAC)','额定电流\n(A)','额定频率\n(Hz)','效率\n%','功率因数\ncosΦ','极数','防护等级\nIP','绝缘等级\nIns','工作制','接法\nConn','冷却方式','进水压力\nMPa','进水口温度\n℃','水质要求'];
 const widths=[7,9,10,35,12,12,13,13,12,12,10,12,8,12,10,10,10,12,16,16,27];
@@ -59,10 +61,15 @@ function addSupportColumns(sheet:ExcelJS.Worksheet, count:number, info:ProjectIn
   for(let col=22;col<=52;col++)sheet.getColumn(col).hidden=true;
 }
 
-export async function motorSpecWorkbook(info:ProjectInfo,demands:DriveDemand[],choices:MotorChoice[]) {
+export async function motorSpecWorkbook(project:ProjectData,choices:MotorChoice[]) {
+  const {info,settings,processes}=project;
+  const result=calculateMatrix(settings,processes);
+  if (!result.valid)throw new Error('请先补齐全部工艺参数。');
+  const demands=result.maxima;
   if(!demands.length || demands.some((_,i)=>!choices[i]||!validChoice(choices[i])))throw new Error('请逐道选择有效中心高及偶数极数。');
   const wb=new ExcelJS.Workbook();wb.creator='直驱选型';wb.calcProperties.fullCalcOnLoad=true;
   const sheet=wb.addWorksheet('电机选型');
+  const drawingRefs=addDrawingProcessSheet(wb,project,result);
   sheet.mergeCells('A1:U1');
   const title=[info.projectName.trim(),info.customerName.trim()].filter(Boolean).join(' · ')||'电机选型';
   sheet.getCell('A1').value=formula('IF($AZ$1&$AZ$2="","电机选型",$AZ$1&IF(AND($AZ$1<>"",$AZ$2<>"")," · ","")&$AZ$2)',title);
@@ -76,7 +83,7 @@ export async function motorSpecWorkbook(info:ProjectInfo,demands:DriveDemand[],c
     const row=sheet.addRow([i+1,defaults.series,Number(choice.height),
       formula(`IF(OR(C${r}="",M${r}=""),"",B${r}&C${r}&"P"&M${r}&"-"&G${r}&"-"&F${r}&"-"&ROUND(E${r},0))`,spec.model),
       formula(`F${r}*G${r}/9550`,spec.power),
-      spec.rpm,spec.torque,defaults.voltage,
+      formula(drawingRefs[i].rpm,spec.rpm),formula(drawingRefs[i].torque,spec.torque),defaults.voltage,
       formula(`IFERROR(IF(K${r}="","",E${r}*1000/1.732/(H${r}*$AZ$3)/K${r}/L${r}),"")`,spec.current),
       formula(`IF(M${r}="","",F${r}*M${r}/120)`,spec.frequency),
       formula(`IF(OR(F${r}<=0,F${r}>6000,V${r}<0.55,V${r}>1250),"",ROUND(AE${r}+(AF${r}-AE${r})*Z${r},1)/100)`,spec.efficiency.value),
@@ -85,9 +92,9 @@ export async function motorSpecWorkbook(info:ProjectInfo,demands:DriveDemand[],c
       cell.font={name:'Times New Roman',size:10,bold:true,color:{argb:'FF3333FF'}};
       cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};cell.border={left:line,right:line,top:line,bottom:line};
     });
-    for(const col of ['C','F','G','M'])sheet.getCell(col+r).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF5D9'}};
-    sheet.getCell('C'+r).dataValidation={type:'whole',operator:'greaterThan',formulae:[0],showErrorMessage:true,error:'中心高须为正整数。'};
-    sheet.getCell('M'+r).dataValidation={type:'custom',formulae:[`AND(ISNUMBER(M${r}),M${r}>=2,MOD(M${r},2)=0)`],showErrorMessage:true,error:'极数须为正偶数。'};
+    for(const col of ['C','M'])sheet.getCell(col+r).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFFFF5D9'}};
+    sheet.getCell('C'+r).dataValidation={type:'custom',formulae:[`AND(ISNUMBER(C${r}),C${r}>0,INT(C${r})=C${r},OR(C${r}<80,C${r}>132))`],showErrorMessage:true,error:'中心高须为正整数，80～132 mm 已移除。'};
+    sheet.getCell('M'+r).dataValidation={type:'custom',formulae:[`AND(ISNUMBER(M${r}),M${r}>=2,MOD(M${r},2)=0,M${r}<>4,M${r}<>6,M${r}<>120)`],showErrorMessage:true,error:'请填写正偶数极数，4、6、120 极已移除。'};
     for(const [col,format] of Object.entries({E:'0',F:'0',G:'0',I:'0.0',J:'0.0',K:'0.0%',L:'0.00'}))sheet.getCell(col+r).numFmt=format;
   });
   addSupportColumns(sheet, demands.length, info);
