@@ -21,6 +21,14 @@ test('existing efficiency tool reference values, bands and unavailable results',
   assert.match(efficiencyAt(30,11).note,/外推/);
   for(const [rpm,power] of [[0,11],[6001,11],[45,0],[45,1251]])assert.equal(efficiencyAt(rpm,power).value,null);
 });
+test('spec uses the nearest whole kW for the efficiency lookup and its range check',()=>{
+  const choice={height:'355',poles:'64'};
+  const spec=motorSpec({roundedRpm:105,roundedTorque:3940},choice);
+  assert.equal(spec.efficiency.value,0.907); // 43.319 kW → 43 kW at 105 r/min
+  assert.ok(Math.abs(spec.current!-83.02940874679133)<1e-9);
+  assert.equal(motorSpec({roundedRpm:125,roundedTorque:40},choice).efficiency.value,efficiencyAt(125,1).value);
+  assert.equal(motorSpec({roundedRpm:125,roundedTorque:35},choice).efficiency.value,null);
+});
 test('spec workbook keeps 21 ordered fields, references and cached results for arbitrary pass counts',async()=>{
   const demands=Array.from({length:13},(_,i)=>({roundedTorque:i===12?0:3170,roundedRpm:115}));
   const choices=demands.map(()=>({height:'315',poles:'32'}));
@@ -39,6 +47,8 @@ test('spec workbook keeps 21 ordered fields, references and cached results for a
   assert.equal(spec.getCell('F15').value,115);
   assert.equal(spec.getCell('G15').value,0);
   assert.equal(spec.getCell('E3').formula,'F3*G3/9550');
+  assert.equal(spec.getCell('V3').formula,'ROUND(E3,0)');
+  assert.match(spec.getCell('K3').formula!,/V3<0.55,V3>1250/);
   assert.equal(spec.getCell('E3').numFmt,'0');
   assert.equal(spec.getCell('J3').numFmt,'0.0');
   assert.equal(spec.getCell('AJ4').value,59.9);

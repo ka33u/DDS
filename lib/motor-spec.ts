@@ -44,11 +44,12 @@ export function efficiencyAt(rpm:number, power:number) {
 export function motorSpec(demand:DriveDemand, choice:MotorChoice) {
   const torque=demand.roundedTorque, rpm=demand.roundedRpm;
   const power=torque*rpm/9550;
-  const efficiency=efficiencyAt(rpm,power);
+  const ratedPowerKW = Math.round(power);
+  const efficiency=efficiencyAt(rpm,ratedPowerKW);
   const poles=Number(choice.poles);
   const frequency=Number.isSafeInteger(poles)&&poles>=2&&poles%2===0 ? rpm*poles/120 : null;
   const current=efficiency.value===null ? null :
     power*1000/1.732/(defaults.voltage*defaults.voltageFactor)/efficiency.value/defaults.powerFactor;
-  const model=validChoice(choice) ? `${defaults.series}${Number(choice.height)}P${poles}-${torque}-${rpm}-${Math.round(power)}` : '';
+  const model=validChoice(choice) ? `${defaults.series}${Number(choice.height)}P${poles}-${torque}-${rpm}-${ratedPowerKW}` : '';
   return {torque,rpm,power,efficiency,current,frequency,model};
 }

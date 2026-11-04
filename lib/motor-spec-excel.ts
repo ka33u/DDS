@@ -35,11 +35,12 @@ function addSupportColumns(sheet:ExcelJS.Worksheet, count:number, info:ProjectIn
   const powerAxis='$AI$2:$AI$29',speedAxis='$AJ$1:$AW$1',grid='$AJ$2:$AW$29';
   const powerAt=(index:string)=>`INDEX(${powerAxis},${index})`;
   const speedAt=(index:string)=>`INDEX(${speedAxis},1,${index})`;
-  const labels=['功率起点','功率下标','功率上标','功率权重','转速起点','转速下标','转速上标','转速权重','低功率效率 %','高功率效率 %'];
-  labels.forEach((label,i)=>{sheet.getCell(2,23+i).value=label;});
+  const labels=['效率查询功率 kW','功率起点','功率下标','功率上标','功率权重','转速起点','转速下标','转速上标','转速权重','低功率效率 %','高功率效率 %'];
+  labels.forEach((label,i)=>{sheet.getCell(2,22+i).value=label;});
   for (let r=3;r<count+3;r++){
-    const power=`E${r}`, speed=`F${r}`;
+    const power=`V${r}`, speed=`F${r}`;
     const cell=(col:string,expression:string)=>set(col+r,formula(expression));
+    cell('V',`ROUND(E${r},0)`);
     cell('W',`IFERROR(MATCH(${power},${powerAxis},1),1)`);
     const nextPower=`MIN(28,W${r}+1)`;
     cell('X',`IF(AND(${power}<=280,ABS(${power}-${powerAt(nextPower)})<0.001),${nextPower},W${r})`);
@@ -78,7 +79,7 @@ export async function motorSpecWorkbook(info:ProjectInfo,demands:DriveDemand[],c
       spec.rpm,spec.torque,defaults.voltage,
       formula(`IFERROR(IF(K${r}="","",E${r}*1000/1.732/(H${r}*$AZ$3)/K${r}/L${r}),"")`,spec.current),
       formula(`IF(M${r}="","",F${r}*M${r}/120)`,spec.frequency),
-      formula(`IF(OR(F${r}<=0,F${r}>6000,E${r}<0.55,E${r}>1250),"",ROUND(AE${r}+(AF${r}-AE${r})*Z${r},1)/100)`,spec.efficiency.value),
+      formula(`IF(OR(F${r}<=0,F${r}>6000,V${r}<0.55,V${r}>1250),"",ROUND(AE${r}+(AF${r}-AE${r})*Z${r},1)/100)`,spec.efficiency.value),
       defaults.powerFactor,Number(choice.poles),defaults.protection,defaults.insulation,defaults.duty,defaults.connection,defaults.cooling,defaults.waterPressure,defaults.waterTemp,defaults.waterQuality]);
     row.height=30;row.eachCell(cell=>{
       cell.font={name:'Times New Roman',size:10,bold:true,color:{argb:'FF3333FF'}};

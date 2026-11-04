@@ -58,7 +58,7 @@ export function MotorSelection({info,demands,choices,onChange}:Props){
       </table></div>}
     <datalist id="motor-heights">{heightOptions.map(n=><option key={n} value={n}/>)}</datalist>
     <datalist id="motor-poles">{poleOptions.map(n=><option key={n} value={n}/>)}</datalist>
-    <p className="text-muted-foreground">{defaults.series} · {defaults.voltage} VAC · cosφ {defaults.powerFactor} · IP55 / F / S1 / Y · 水冷。功率按整数 kW 显示，效率和电流按计算功率求取。效率采用 GB 30253-2024 一级能效参考值。导出后可在「电机选型」表中调整中心高、极数、转速和转矩。</p>
+    <p className="text-muted-foreground">{defaults.series} · {defaults.voltage} VAC · cosφ {defaults.powerFactor} · IP55 / F / S1 / Y · 水冷。效率按四舍五入后的整数功率（kW）和额定转速插值，采用 GB 30253-2024 一级能效参考值。导出后可在「电机选型」表中调整中心高、极数、转速和转矩。</p>
     {error&&<p role="alert" className="text-destructive">{error}</p>}
   </section>;
 }
