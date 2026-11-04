@@ -53,12 +53,12 @@ export function MotorSelection({info,demands,choices,onChange}:Props){
             <td><input aria-label={`第${i+1}道中心高`} list="motor-heights" type="number" min="1" step="1" placeholder="选择" value={choice.height} onChange={e=>setChoice(i,'height',e.target.value)}/></td>
             <td><input aria-label={`第${i+1}道极数`} list="motor-poles" type="number" min="2" step="2" placeholder="选择" value={choice.poles} onChange={e=>setChoice(i,'poles',e.target.value)}/></td>
             <td>{spec.model||'待选中心高与极数'}</td><td>{display(spec.torque)}</td><td>{display(spec.rpm)}</td>
-            <td>{display(spec.power)}</td><td>{display(spec.frequency)}</td><td>{spec.efficiency.value===null?'—':display(spec.efficiency.value*100,1)+'%'}<small>{spec.efficiency.note}</small></td><td>{display(spec.current,1)}</td></tr>;
+            <td>{display(spec.power,0)}</td><td>{spec.frequency===null?'—':spec.frequency.toFixed(1)}</td><td>{spec.efficiency.value===null?'—':display(spec.efficiency.value*100,1)+'%'}<small>{spec.efficiency.note}</small></td><td>{display(spec.current,1)}</td></tr>;
         })}</tbody>
       </table></div>}
     <datalist id="motor-heights">{heightOptions.map(n=><option key={n} value={n}/>)}</datalist>
     <datalist id="motor-poles">{poleOptions.map(n=><option key={n} value={n}/>)}</datalist>
-    <p className="text-muted-foreground">{defaults.series} · {defaults.voltage} VAC · cosφ {defaults.powerFactor} · IP55 / F / S1 / Y · 水冷。效率采用 GB 30253-2024 一级能效查询参考值。导出后可在“规格预设”和“道次需求”中调整参数。</p>
+    <p className="text-muted-foreground">{defaults.series} · {defaults.voltage} VAC · cosφ {defaults.powerFactor} · IP55 / F / S1 / Y · 水冷。功率按整数 kW 显示，效率和电流按计算功率求取。效率采用 GB 30253-2024 一级能效参考值。导出后可在「电机选型」表中调整中心高、极数、转速和转矩。</p>
     {error&&<p role="alert" className="text-destructive">{error}</p>}
   </section>;
 }
