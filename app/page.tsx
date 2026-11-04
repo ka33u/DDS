@@ -4,6 +4,8 @@ import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Table,TableHeader,TableBody,TableRow,TableHead,TableCell} from '@/components/ui/table';
 import {calculateMatrix,newMatrixProcess,copyMatrixProcess,speedInMetresPerSecond,type MatrixProcess,type MatrixSettings} from '@/lib/drawing-matrix';
+import {MotorSelection} from '@/components/motor-selection';
+import type {MotorChoice} from '@/lib/motor-spec';
 import type {ProjectInfo,ProjectData} from '@/lib/project-excel';
 const key='dds-horizontal-matrix:v1';
 const fmt=(v:number)=>v.toLocaleString('zh-CN',{maximumFractionDigits:2});
@@ -11,17 +13,18 @@ export default function Home(){
   const [settings,setSettings]=useState<MatrixSettings>({count:7,first:'1.4',other:'1.3'});
   const [count,setCount]=useState('7'),[processes,setProcesses]=useState<MatrixProcess[]>([]);
   const [info,setInfo]=useState<ProjectInfo>({projectName:'',customerName:''});
-  const [busy,setBusy]=useState(false),[importError,setImportError]=useState(''),[undo,setUndo]=useState<ProjectData|null>(null);
+  const [motorChoices,setMotorChoices]=useState<MotorChoice[]>([]);
+  const [busy,setBusy]=useState(false),[importError,setImportError]=useState(''),[undo,setUndo]=useState<(ProjectData & {motorChoices:MotorChoice[]})|null>(null);
   const templateDialog=useRef<HTMLDialogElement>(null);
   const [templateCount,setTemplateCount]=useState('');
   const fileInput=useRef<HTMLInputElement>(null);
   const [ready,setReady]=useState(false),[message,setMessage]=useState('');
-  useEffect(()=>{let saved:{settings:MatrixSettings;processes:MatrixProcess[];info?:ProjectInfo}|undefined;
+  useEffect(()=>{let saved:{settings:MatrixSettings;processes:MatrixProcess[];info?:ProjectInfo;motorChoices?:MotorChoice[]}|undefined;
     try{const raw=localStorage.getItem(key);if(raw){const d=JSON.parse(raw);if(!Number.isInteger(d.settings?.count)||d.settings.count<1||d.settings.count>128||!Array.isArray(d.processes)||!d.processes.every((p:MatrixProcess)=>typeof p.id==='string'&&Array.isArray(p.dies)&&Array.isArray(p.drums)))throw new Error();saved=d;}}
     catch{queueMicrotask(()=>setMessage('本机新表数据读取失败，请重新录入。旧版数据未修改。'));}
-    queueMicrotask(()=>{if(saved){setInfo({projectName:typeof saved.info?.projectName==='string'?saved.info.projectName:'',customerName:typeof saved.info?.customerName==='string'?saved.info.customerName:''});setSettings(saved.settings);setCount(String(saved.settings.count));setProcesses(saved.processes.map(speedInMetresPerSecond));}setReady(true);});
+    queueMicrotask(()=>{if(saved){if(Array.isArray(saved.motorChoices))setMotorChoices(saved.motorChoices.map(c=>({height:typeof c?.height==='string'?c.height:'',poles:typeof c?.poles==='string'?c.poles:''})));setInfo({projectName:typeof saved.info?.projectName==='string'?saved.info.projectName:'',customerName:typeof saved.info?.customerName==='string'?saved.info.customerName:''});setSettings(saved.settings);setCount(String(saved.settings.count));setProcesses(saved.processes.map(speedInMetresPerSecond));}setReady(true);});
   },[]);
-  useEffect(()=>{if(ready)try{localStorage.setItem(key,JSON.stringify({settings,processes,info}));}catch{queueMicrotask(()=>setMessage('本机保存失败，请导出结果。'));}},[ready,settings,processes,info]);
+  useEffect(()=>{if(ready)try{localStorage.setItem(key,JSON.stringify({settings,processes,info,motorChoices}));}catch{queueMicrotask(()=>setMessage('本机保存失败，请导出结果。'));}},[ready,settings,processes,info,motorChoices]);
   const result=useMemo(()=>calculateMatrix(settings,processes),[settings,processes]);
   const cols=Array.from({length:settings.count},(_,i)=>i);
   const update=(id:string,patch:Partial<MatrixProcess>)=>setProcesses(old=>old.map(p=>p.id===id?{...p,...patch}:p));
@@ -46,7 +49,7 @@ export default function Home(){
       if(file.size>20*1024*1024)throw new Error('文件不能超过20MB。');
       const {readProjectExcel}=await import('@/lib/project-excel');
       const data=await readProjectExcel(await file.arrayBuffer(),settings);
-      setUndo(structuredClone({info,settings,processes}));setInfo(data.info);setSettings(current=>({...current,count:data.settings.count}));setCount(String(data.settings.count));setProcesses(data.processes);
+      setUndo(structuredClone({info,settings,processes,motorChoices}));setMotorChoices([]);setInfo(data.info);setSettings(current=>({...current,count:data.settings.count}));setCount(String(data.settings.count));setProcesses(data.processes);
       setMessage('已导入 '+data.processes.length+' 套工艺，'+data.settings.count+' 道；已替换当前项目，可撤销本次导入。');
     }catch(e){setImportError(e instanceof Error?e.message:'导入失败，请检查文件。');}finally{setBusy(false);if(fileInput.current)fileInput.current.value='';}
   };
@@ -67,7 +70,7 @@ export default function Home(){
       <Button variant="outline" disabled={busy||!ready} onClick={()=>{setTemplateCount('');templateDialog.current?.showModal();}}>下载标准输入表</Button>
       <Button variant="outline" disabled={busy||!ready} onClick={()=>fileInput.current?.click()}>{busy?'正在处理…':'一键导入 Excel'}</Button>
       <input ref={fileInput} type="file" accept=".xlsx" className="hidden" aria-label="导入标准工艺输入表" onChange={e=>{const file=e.target.files?.[0];if(file)void importFile(file);}}/>
-      {undo&&<Button variant="ghost" disabled={busy} onClick={()=>{setInfo(undo.info);setSettings(undo.settings);setCount(String(undo.settings.count));setProcesses(undo.processes);setUndo(null);setMessage('已恢复导入前的项目。');setImportError('');}}>撤销导入</Button>}
+      {undo&&<Button variant="ghost" disabled={busy} onClick={()=>{setMotorChoices(undo.motorChoices);setInfo(undo.info);setSettings(undo.settings);setCount(String(undo.settings.count));setProcesses(undo.processes);setUndo(null);setMessage('已恢复导入前的项目。');setImportError('');}}>撤销导入</Button>}
       <p className="w-full text-xs text-muted-foreground">下载前先选择模板模数 → 客户填写项目、客户和全部工艺 → 保存为 .xlsx 后一键导入。支持继续添加工艺行；扭矩系数仅在系统设置，导入不修改系数。校验失败不会替换当前数据。</p>
       {importError&&<p role="alert" className="w-full whitespace-pre-wrap text-sm text-destructive">{importError}</p>}
     </section>
@@ -90,6 +93,7 @@ export default function Home(){
     {result.rows.map(r=><TableRow key={r.id}><TableCell className="sticky left-0 z-10 bg-card font-medium">{r.name}</TableCell>{r.errors.length||!r.points.length?<TableCell colSpan={settings.count} className="text-destructive whitespace-normal">{r.errors.length?<details className="matrix-errors"><summary>待完善 {r.errors.length} 项 · {r.errors[0]}</summary><p>{r.errors.join('；')}</p></details>:'请检查统一系数'}</TableCell>:r.points.map((p,i)=><TableCell key={i} className="border-l text-center tabular-nums"><span className="matrix-torque result-torque">{fmt(p.torque)}{p.skipped&&<small className="skip-label result-skip" title="跳模：理论拉拔扭矩为0">跳模</small>}</span><span className="matrix-rpm">{fmt(p.rpm)}</span></TableCell>)}</TableRow>)}
     <TableRow className="bg-primary/10 font-semibold"><TableCell className="sticky left-0 z-10 bg-primary text-primary-foreground">取整综合最大值</TableCell>{result.valid?result.maxima.map((p,i)=><TableCell key={i} className="border-l text-center tabular-nums"><span className="matrix-torque">{fmt(p.roundedTorque)}</span><span className="matrix-rpm">{fmt(p.roundedRpm)}</span><span className="matrix-source" title={'扭矩：'+p.torqueSource}>扭：{p.torqueSource}</span><span className="matrix-source" title={'转速：'+p.speedSource}>速：{p.speedSource}</span></TableCell>):<TableCell colSpan={settings.count} className="text-muted-foreground font-normal">{processes.length?'请补齐全部工艺后再综合，避免漏算最大需求。':'尚未添加工艺。'}</TableCell>}</TableRow>
     </TableBody></Table></div><div className="torque-total"><span>取整扭矩总和 <strong>{result.valid?fmt(result.totalRoundedTorque!):'—'}</strong> N·m</span></div></section>
+    <MotorSelection info={info} demands={Number(count)===settings.count?result.maxima:[]} choices={motorChoices} onChange={setMotorChoices}/>
     <details className="rounded-xl border p-4 text-sm leading-7"><summary className="cursor-pointer font-medium">公式核对与跳模说明</summary><p>各道线速 vᵢ = 下线速度 × (末道丝径 / 本道丝径)²；转速 nᵢ = vᵢ × 1000 / (π × 滚筒直径)。v 用 m/min，滚筒用 mm；输入 m/s 时先乘60。直驱无减速比。</p><p>原表 5.5→5.05→4.55→4.13→3.8→3.5→3.25→3.25 mm，卷筒560 mm，下线8 m/s（480 m/min），各道转速为113.00、139.20、168.95、199.57、235.25、272.84、272.84 r/min，与原表 N17:N23 一致。</p><p>扭矩采用原表平均强度经验法：σᵢ=进线强度×√(进线丝径/本道丝径)，Fᵢ=0.6×进道丝径²×平均强度×√压缩率，Tᵢ=Fᵢ×滚筒直径/2000×系数。每套工艺第一次实际减径用首道系数。此后每次减径都用其他道次系数，包括中途跳模后的减径。原表后道1.2，新版按要求默认1.3，因此扭矩有相应差异。</p><p>跳模没有压缩，理论拉拔力和扭矩为0；滚筒继续带线时仍有转速。未含摩擦、张力、加速和调模附加载荷，不能将0 N·m当成电机不需实际扭矩。经验拉力模型须按材料验证。旧版草稿保留在原存储中，不自动导入新表。</p></details>
   </main>;
 }

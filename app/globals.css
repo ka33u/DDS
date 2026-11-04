@@ -15,6 +15,11 @@
 .matrix-workspace th { background: #edf4f4; text-align: center; color: #426169; height: 52px; }
 .matrix-workspace th small { font-size: 10px; font-weight: 400; color: #65737c; }
 .matrix-workspace td { text-align: center; }
+.matrix-workspace .motor-spec-table { table-layout: auto; width: 100%; min-width: 880px; font-variant-numeric: tabular-nums; }
+.motor-spec-table td { border-top: 1px solid var(--border); }
+.motor-spec-table th { height: 38px; }
+.motor-spec-table input { max-width: 88px; }
+.motor-spec-table small { display: block; font-size: 10px; color: #627880; }
 .matrix-workspace tbody tr:nth-child(even):not(:last-child) { background: #f8fafb; }
 .matrix-workspace table input { width: 100%; min-width: 0; height: 29px; padding: 3px; border-radius: 5px; font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; box-shadow: none; background: #fff; }
 .matrix-workspace table input[type=number] { appearance: textfield; -moz-appearance: textfield; }
